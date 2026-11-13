@@ -24,10 +24,10 @@ Feedbox is the worked example for an article about TRIAD (Tracker-Recorded, Inde
 
 ## Branches, pull requests and merging
 1. Each task works on its own branch from `main`, named `f<n>-<topic>` (for example `f2-core`), and opens exactly ONE pull request into `main`.
-2. Never push to `main` directly. The ruleset on `main` restricts deletions, blocks force pushes and requires a pull request (0 approvals). Required status checks are added in M2.
+2. Never push to `main` directly. The ruleset on `main` restricts deletions, blocks force pushes, requires a pull request (0 approvals) and requires the status checks `lint`, `typecheck`, `unit` and `Vercel` (since M2; `db` is added in M3).
 3. **Never merge** in a build task. Merging is a separate merge task (M2, M3, …), given only after Nik says "merge" in his chat with Claude.ai. Nik's word, with its time, is recorded in the TRIAD tracker, and the merge task message quotes it.
 4. A merge task: check that the branch head is the approved commit, confirm the pull request's checks are green, squash-merge with gh (`--match-head-commit`), delete the branch, confirm that the Production deployment of `main` succeeds, tag the merge commit `f<n>`, and report.
-5. CI checks (GitHub Actions workflow `CI`): `lint`, `typecheck`, `unit`.
+5. CI checks (GitHub Actions workflow `CI`): `lint`, `typecheck`, `unit`, `db` (pgTAP tests on a local Supabase database in Docker on the runner).
 
 ## Three rules that are never broken
 1. **You never hold a Supabase secret key**: not in a file on the Mac, not in your shell, not in a commit. The preview secret key exists only as the GitHub Actions secret `SUPABASE_PREVIEW_SECRET_KEY`, used only by CI.
@@ -47,9 +47,20 @@ Supabase projects were created with "Automatically expose new tables" ON and "En
 - `npm run dev`: local server on http://localhost:3000
 - `npm run lint`, `npm run typecheck`, `npm test`: the same three checks as CI
 - `npm run build`: production build (what Vercel runs)
+- `npm run db:start`: local Supabase database in Docker (colima must be running: `colima start`). Applies `supabase/migrations/` and `supabase/seed.sql`. Ports 5542x, so it runs beside other local Supabase projects.
+- `npm run test:db`: the pgTAP tests in `supabase/tests/` against the local database
+- `npm run db:reset`: rebuild the local database from the migration and the seed
+- `npm run db:stop`: stop this project's local containers only
+
+## Database
+- One migration per database task in `supabase/migrations/`. It must run as one script in the Supabase SQL Editor (no psql commands).
+- Every new table: revoke all from anon and authenticated, grant back only what is needed (column by column for writes), enable RLS, add policies. Every security definer function: `set search_path = ''` and full schema names.
+- `supabase/seed.sql` (Lumen) is for local and feedbox-preview only. `supabase/production/` holds the few rows feedbox-prod needs.
+- Tests: `supabase/tests/NN_name.sql`, each in a transaction that is rolled back, sharing `supabase/tests/_helpers.psql`. Test boards never use the slug `lumen`.
 
 ## Layout
 - `app/`: Next.js App Router routes
 - `lib/feedbox/`: core library. Pure TypeScript with **no** Supabase or Next imports; unit tests sit beside the code as `*.test.ts`
 - `design/`: design brief and the six screen sources (part of the app's definition)
-- Later tasks add `supabase/`, `e2e/`, `components/`, `screenshots/`, `TRIAD.md` and `templates/`
+- `supabase/`: `config.toml` (local only), `migrations/`, `seed.sql`, `production/`, `tests/`, `templates/`
+- Later tasks add `e2e/`, `components/`, `screenshots/`, `TRIAD.md` and `templates/` (at the root)
