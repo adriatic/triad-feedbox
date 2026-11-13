@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Feedbox board on a phone: Lumen</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:inherit;text-decoration:none}
+button,input{font-family:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+</style>
+</helmet>
+<div style="{{rootStyle}}; width: 390px; height: 844px; box-sizing: border-box; overflow: hidden; position: relative; background: var(--bg); color: var(--ink); font-family: Inter, system-ui, sans-serif; font-size: 15px; line-height: 1.45; display: flex; flex-direction: column">
+  <header style="background: var(--card); border-bottom: 1px solid var(--line); padding: 14px 16px; display: flex; align-items: center; gap: 10px">
+    <div style="width: 28px; height: 28px; border-radius: 8px; background: var(--accent); color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-weight: 700">L</div>
+    <span style="font-weight: 600; font-size: 17px; flex-grow: 1">Lumen</span>
+    <span style="font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px">Visitor</span>
+    <a href="SignIn.dc.html" style="font-weight: 500; font-size: 14px; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px">Sign in</a>
+  </header>
+  <div style="padding: 16px 16px 8px; display: flex; flex-direction: column; gap: 12px">
+    <h1 style="margin: 0; font-size: 22px; line-height: 1.2">What should Lumen do next?</h1>
+    <a href="PostIdea.dc.html" style="background: var(--accent); color: #FFFFFF; font-weight: 600; text-align: center; border-radius: 10px; padding: 13px 16px">Post an idea</a>
+  </div>
+  <div role="tablist" style="display: flex; border-bottom: 1px solid var(--line); padding: 0 8px; overflow-x: auto">
+    <sc-for list="{{tabs}}" as="tab" hint-placeholder-count="4">
+      <button role="tab" aria-selected="{{tab.selected}}" onClick="{{ tab.pick }}" style="background: none; border: none; border-bottom: 3px solid {{tab.line}}; color: {{tab.color}}; font-size: 14px; font-weight: 600; padding: 10px 10px; cursor: pointer; min-height: 44px; white-space: nowrap">{{tab.label}} {{tab.count}}</button>
+    </sc-for>
+  </div>
+  <ul style="list-style: none; margin: 0; padding: 12px 16px 16px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; flex-grow: 1">
+    <sc-for list="{{rows}}" as="item" hint-placeholder-count="4">
+      <li style="background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; gap: 12px; align-items: flex-start">
+        <button onClick="{{ item.vote }}" aria-pressed="{{item.voted}}" aria-label="{{item.voteLabel}}" style="flex-shrink: 0; width: 52px; border: 2px solid {{item.voteBorder}}; background: {{item.voteBg}}; color: {{item.voteFg}}; border-radius: 10px; padding: 6px 0; display: flex; flex-direction: column; align-items: center; cursor: pointer; font-size: 16px; font-weight: 700">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>
+          <span>{{item.votes}}</span>
+        </button>
+        <div style="flex-grow: 1; min-width: 0">
+          <a href="Idea.dc.html" style="font-weight: 600; font-size: 16px">{{item.title}}</a>
+          <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px">
+            <span style="background: {{item.chipBg}}; color: {{item.chipFg}}; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 1px 9px">{{item.status}}</span>
+            <span style="font-size: 12px; color: var(--muted)">{{item.comments}} comments</span>
+          </div>
+        </div>
+      </li>
+    </sc-for>
+  </ul>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"accent":{"editor":"color","default":"#4338CA"},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { tab: 'Planned', voted: {} };
+  }
+  renderVals() {
+    const dark = !!this.props.dark;
+    const accent = this.props.accent || '#4338CA';
+    const th = dark
+      ? { bg: '#0F1115', card: '#171A21', ink: '#ECEEF3', muted: '#A3ABBA', line: '#2A2F3A', accent: '#8B93FF',
+          open: ['#2A2F3A', '#D5DAE5'], planned: ['#1B2B5C', '#C9D8FF'], building: ['#4A2F08', '#FFD9A0'], shipped: ['#12402B', '#B8EBD0'], votedFg: '#0F1115' }
+      : { bg: '#F6F7F9', card: '#FFFFFF', ink: '#16181D', muted: '#5B6270', line: '#E3E5EA', accent: accent,
+          open: ['#ECEEF2', '#3A4150'], planned: ['#E0EAFF', '#1E3A8A'], building: ['#FDEBC8', '#7A3E00'], shipped: ['#D8F3E3', '#0F5132'], votedFg: '#FFFFFF' };
+    const rootStyle = '--bg:' + th.bg + ';--card:' + th.card + ';--ink:' + th.ink + ';--muted:' + th.muted + ';--line:' + th.line + ';--accent:' + th.accent;
+    const voted = this.state.voted;
+    const all = [
+      { id: 1, title: 'Dark mode for the editor', votes: 214, status: 'Planned', comments: 18 },
+      { id: 2, title: 'Export notes to Markdown', votes: 187, status: 'Building', comments: 24 },
+      { id: 3, title: 'Offline mode', votes: 132, status: 'Planned', comments: 11 },
+      { id: 4, title: 'Keyboard shortcut cheat sheet', votes: 96, status: 'Shipped', comments: 6 },
+      { id: 5, title: 'Faster startup on large notebooks', votes: 88, status: 'Shipped', comments: 9 },
+      { id: 6, title: 'Sync between two laptops', votes: 73, status: 'Open', comments: 14 },
+      { id: 7, title: 'Search inside attachments', votes: 58, status: 'Open', comments: 5 },
+      { id: 8, title: 'Share a note by link', votes: 49, status: 'Open', comments: 8 },
+      { id: 9, title: 'Tag notes by colour', votes: 41, status: 'Open', comments: 3 }
+    ].map((i) => ({ ...i, v: i.votes + (voted[i.id] ? 1 : 0) }));
+    const names = ['Open', 'Planned', 'Building', 'Shipped'];
+    const tabs = names.map((n) => ({
+      label: n,
+      count: all.filter((i) => i.status === n).length,
+      selected: this.state.tab === n,
+      line: this.state.tab === n ? th.accent : 'transparent',
+      color: this.state.tab === n ? th.ink : th.muted,
+      pick: () => this.setState({ tab: n })
+    }));
+    const rows = all.filter((i) => i.status === this.state.tab).sort((a, b) => b.v - a.v).map((i) => {
+      const on = !!voted[i.id];
+      const c = th[i.status.toLowerCase()];
+      return {
+        title: i.title, status: i.status, comments: i.comments, votes: i.v, chipBg: c[0], chipFg: c[1], voted: on,
+        voteLabel: (on ? 'Remove your vote from ' : 'Vote for ') + i.title + ', ' + i.v + ' votes',
+        voteBorder: on ? th.accent : th.line, voteBg: on ? th.accent : th.card, voteFg: on ? th.votedFg : th.ink,
+        vote: () => this.setState({ voted: { ...voted, [i.id]: !on } })
+      };
+    });
+    return { rootStyle, tabs, rows };
+  }
+}
+</script>
+</body>
+</html>

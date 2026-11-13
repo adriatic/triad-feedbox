@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Feedbox idea: Dark mode for the editor</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:inherit;text-decoration:none}
+button,input,select,textarea{font-family:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+</style>
+</helmet>
+<div style="{{rootStyle}}; min-height: 980px; background: var(--bg); color: var(--ink); font-family: Inter, system-ui, sans-serif; font-size: 15px; line-height: 1.5">
+  <header style="background: var(--card); border-bottom: 1px solid var(--line)">
+    <div style="max-width: 920px; margin: 0 auto; padding: 14px 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+      <div style="display: flex; align-items: center; gap: 10px; flex-grow: 1">
+        <div style="width: 28px; height: 28px; border-radius: 8px; background: var(--accent); color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-weight: 700">L</div>
+        <span style="font-weight: 600; font-size: 17px">Lumen</span>
+        <span style="color: var(--muted)">Feedback and roadmap</span>
+      </div>
+      <span style="font-size: 13px; font-weight: 600; color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 3px 10px">Signed in as owner</span>
+      <span style="color: var(--muted)">ana@lumen.example</span>
+    </div>
+  </header>
+  <main style="max-width: 920px; margin: 0 auto; padding: 24px 24px 64px; display: flex; flex-direction: column; gap: 20px">
+    <a href="Main.dc.html" style="color: var(--muted)">&larr; All ideas</a>
+    <article style="background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 24px; display: flex; gap: 22px; align-items: flex-start; flex-wrap: wrap">
+      <button onClick="{{vote}}" aria-pressed="{{voted}}" aria-label="{{voteLabel}}" style="flex-shrink: 0; width: 72px; border: 2px solid {{voteBorder}}; background: {{voteBg}}; color: {{voteFg}}; border-radius: 12px; padding: 10px 0; display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; font-size: 20px; font-weight: 700">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>
+        <span>{{votes}}</span>
+      </button>
+      <div style="flex: 1 1 420px; min-width: 0">
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+          <h1 style="margin: 0; font-size: 26px; line-height: 1.25">Dark mode for the editor</h1>
+          <span style="background: var(--planned-bg); color: var(--planned-fg); font-size: 13px; font-weight: 600; border-radius: 999px; padding: 2px 10px">Planned</span>
+        </div>
+        <p style="margin: 6px 0 14px; color: var(--muted); font-size: 13px">Posted by Mira K. on Oct 3, 2026</p>
+        <p style="margin: 0 0 12px">A true dark theme for the editor and sidebar that follows the system setting. Late at night the white editor is hard on the eyes, and the current grey theme still leaves the sidebar bright.</p>
+        <p style="margin: 0">It should also remember my choice per device, so my laptop can stay dark while the tablet stays light.</p>
+      </div>
+    </article>
+    <section aria-label="Owner tools" style="background: var(--card); border: 1px dashed var(--accent); border-radius: 12px; padding: 16px 20px; display: flex; flex-wrap: wrap; align-items: center; gap: 14px">
+      <span style="font-weight: 600; color: var(--accent)">Owner tools</span>
+      <label style="display: flex; align-items: center; gap: 8px">Status
+        <select style="background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 0 10px; min-height: 44px; font-size: 15px">
+          <option>Open</option>
+          <option selected>Planned</option>
+          <option>Building</option>
+          <option>Shipped</option>
+        </select>
+      </label>
+      <button style="background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 0 16px; min-height: 44px; font-size: 15px; cursor: pointer">Merge into another idea</button>
+      <button style="background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 0 16px; min-height: 44px; font-size: 15px; cursor: pointer">Hide idea</button>
+    </section>
+    <section aria-label="Comments" style="display: flex; flex-direction: column; gap: 12px">
+      <h2 style="margin: 8px 0 0; font-size: 18px">18 comments</h2>
+      <div style="background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px">
+        <div style="font-weight: 600">Ana <span style="font-weight: 600; color: var(--accent); font-size: 12px; border: 1px solid var(--accent); border-radius: 999px; padding: 1px 8px; margin-left: 6px">Owner</span> <span style="font-weight: 400; color: var(--muted); font-size: 13px; margin-left: 6px">Oct 9</span></div>
+        <p style="margin: 4px 0 0">Planned for the December release. We will follow the system setting first and add a manual switch after that.</p>
+      </div>
+      <div style="background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px">
+        <div style="font-weight: 600">Tom R. <span style="font-weight: 400; color: var(--muted); font-size: 13px; margin-left: 6px">Oct 5</span></div>
+        <p style="margin: 4px 0 0">Yes please. I would also like the code blocks to keep their own colours.</p>
+      </div>
+      <form style="display: flex; flex-direction: column; gap: 10px">
+        <label for="c1" style="font-weight: 600">Add a comment</label>
+        <textarea id="c1" rows="3" placeholder="What would help here?" style="background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 10px; padding: 12px; font-size: 15px; resize: vertical"></textarea>
+        <div><button type="button" style="background: var(--accent); color: #FFFFFF; border: none; border-radius: 10px; padding: 0 20px; min-height: 44px; font-size: 15px; font-weight: 600; cursor: pointer">Post comment</button></div>
+      </form>
+    </section>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"accent":{"editor":"color","default":"#4338CA"},"$preview":{"width":1280,"height":980}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { voted: false };
+  }
+  renderVals() {
+    const dark = !!this.props.dark;
+    const accent = this.props.accent || '#4338CA';
+    const th = dark
+      ? { bg: '#0F1115', card: '#171A21', ink: '#ECEEF3', muted: '#A3ABBA', line: '#2A2F3A', accent: '#8B93FF', pbg: '#1B2B5C', pfg: '#C9D8FF', votedFg: '#0F1115' }
+      : { bg: '#F6F7F9', card: '#FFFFFF', ink: '#16181D', muted: '#5B6270', line: '#E3E5EA', accent: accent, pbg: '#E0EAFF', pfg: '#1E3A8A', votedFg: '#FFFFFF' };
+    const rootStyle = '--bg:' + th.bg + ';--card:' + th.card + ';--ink:' + th.ink + ';--muted:' + th.muted + ';--line:' + th.line + ';--accent:' + th.accent + ';--planned-bg:' + th.pbg + ';--planned-fg:' + th.pfg;
+    const on = this.state.voted;
+    const votes = 214 + (on ? 1 : 0);
+    return {
+      rootStyle, voted: on, votes,
+      voteLabel: (on ? 'Remove your vote, ' : 'Vote, ') + votes + ' votes',
+      voteBorder: on ? th.accent : th.line, voteBg: on ? th.accent : th.card, voteFg: on ? th.votedFg : th.ink,
+      vote: () => this.setState({ voted: !on })
+    };
+  }
+}
+</script>
+</body>
+</html>
