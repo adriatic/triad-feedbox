@@ -421,6 +421,8 @@ create trigger comments_after_change
   for each row execute function private.comments_after_change();
 
 -- 5g. A changelog line must name a Shipped idea from the entry's own board.
+-- This trigger runs BEFORE the row-level security check, so its messages
+-- never name the idea (a non-owner must not learn a hidden idea's title).
 create function private.changelog_items_check()
 returns trigger
 language plpgsql
@@ -439,7 +441,7 @@ begin
       using errcode = 'check_violation';
   end if;
   if v_idea.status <> 'shipped' then
-    raise exception '"%" is not Shipped yet.', v_idea.title
+    raise exception 'Only Shipped ideas can be in the changelog.'
       using errcode = 'check_violation';
   end if;
   return new;

@@ -63,11 +63,22 @@ select throws_ok($$ insert into public.changelog_items (entry_id, idea_id, note)
 select lives_ok($$ insert into public.changelog_items (entry_id, idea_id, note, position) values (tests.entry_id('Release 2.4'), tests.idea_id('Faster startup'), repeat('n', 280), 2) $$,
   'a line of exactly 280 characters is accepted');
 select throws_ok($$ insert into public.changelog_items (entry_id, idea_id, note) values (tests.entry_id('Release 2.4'), tests.idea_id('Dark mode for the editor'), 'Soon.') $$, '23514',
-  '"Dark mode for the editor" is not Shipped yet.', 'an idea that is not Shipped cannot be in the changelog');
+  'Only Shipped ideas can be in the changelog.', 'an idea that is not Shipped cannot be in the changelog');
 select throws_ok($$ insert into public.changelog_items (entry_id, idea_id, note) values (tests.entry_id('Release 2.4'), tests.idea_id('Elsewhere'), 'x') $$, '23514',
   'Every idea in a changelog entry must be on the same board.', 'an idea from another board cannot be in this changelog');
 select throws_ok($$ insert into public.changelog_items (entry_id, idea_id, note) values (tests.entry_id(repeat('v', 80)), tests.idea_id('Keyboard shortcut cheat sheet'), 'Again.') $$, '23505',
   null, 'an idea appears in at most one changelog entry');
+
+-- A hidden idea's title never leaks through an error, even though the line
+-- check runs before row-level security.
+reset role;
+select tests.idea('b1', 'sam', 'Secret spam title');
+update public.ideas set hidden_at = now() where title = 'Secret spam title';
+select tests.as_person('sam');
+select throws_ok($$ insert into public.changelog_items (entry_id, idea_id, note) values (tests.entry_id('Release 2.4'), tests.idea_id('Secret spam title'), 'x') $$, '23514',
+  'Only Shipped ideas can be in the changelog.', 'the error for a hidden idea does not reveal its title');
+reset role;
+select tests.as_person('ana');
 
 -- Publishing
 select throws_ok($$ select public.publish_changelog_entry(tests.entry_id(repeat('v', 80))) $$, '23514',
