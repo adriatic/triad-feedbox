@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Feedbox: sign in</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:inherit;text-decoration:none}
+button,input{font-family:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+</style>
+</helmet>
+<div style="{{rootStyle}}; min-height: 640px; background: var(--bg); color: var(--ink); font-family: Inter, system-ui, sans-serif; font-size: 15px; line-height: 1.5">
+  <header style="background: var(--card); border-bottom: 1px solid var(--line)">
+    <div style="max-width: 920px; margin: 0 auto; padding: 14px 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+      <div style="display: flex; align-items: center; gap: 10px; flex-grow: 1">
+        <div style="width: 28px; height: 28px; border-radius: 8px; background: var(--accent); color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-weight: 700">L</div>
+        <span style="font-weight: 600; font-size: 17px">Lumen</span>
+        <span style="color: var(--muted)">Feedback and roadmap</span>
+      </div>
+      <span style="font-size: 13px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px">Not signed in</span>
+    </div>
+  </header>
+  <main style="max-width: 440px; margin: 0 auto; padding: 56px 24px 64px">
+    <div style="background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 28px; display: flex; flex-direction: column; gap: 16px">
+      <sc-if value="{{notSent}}" hint-placeholder-val="{{true}}">
+        <h1 style="margin: 0; font-size: 24px; line-height: 1.25">Sign in to vote and post</h1>
+        <p style="margin: 0; color: var(--muted)">Enter your email address. We send you a link that signs you in. There is no password.</p>
+        <form style="display: flex; flex-direction: column; gap: 14px">
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <label for="e1" style="font-weight: 600">Email address</label>
+            <input id="e1" type="email" value="{{email}}" onInput="{{onEmail}}" placeholder="you@example.com" style="background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 10px; padding: 0 12px; min-height: 44px; font-size: 16px">
+          </div>
+          <button type="button" onClick="{{send}}" style="background: var(--accent); color: #FFFFFF; border: none; border-radius: 10px; padding: 0 20px; min-height: 44px; font-size: 15px; font-weight: 600; cursor: pointer">Send me a link</button>
+        </form>
+        <a href="Main.dc.html" style="color: var(--muted); text-align: center; padding: 6px">Keep browsing without signing in</a>
+      </sc-if>
+      <sc-if value="{{sent}}" hint-placeholder-val="{{false}}">
+        <h1 style="margin: 0; font-size: 24px; line-height: 1.25">Check your email</h1>
+        <p style="margin: 0">We sent a sign-in link to <strong>{{email}}</strong>. Open it on this device to finish signing in. The link works once and expires in 15 minutes.</p>
+        <p style="margin: 0; color: var(--muted)">Nothing there? Look in your junk folder, then ask for a new link.</p>
+        <button type="button" onClick="{{back}}" style="background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 10px; padding: 0 20px; min-height: 44px; font-size: 15px; cursor: pointer">Use a different email address</button>
+      </sc-if>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"accent":{"editor":"color","default":"#4338CA"},"$preview":{"width":1280,"height":640}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { sent: false, email: 'sam@mail.example' };
+  }
+  renderVals() {
+    const dark = !!this.props.dark;
+    const accent = this.props.accent || '#4338CA';
+    const th = dark
+      ? { bg: '#0F1115', card: '#171A21', ink: '#ECEEF3', muted: '#A3ABBA', line: '#2A2F3A', accent: '#8B93FF' }
+      : { bg: '#F6F7F9', card: '#FFFFFF', ink: '#16181D', muted: '#5B6270', line: '#E3E5EA', accent: accent };
+    const rootStyle = '--bg:' + th.bg + ';--card:' + th.card + ';--ink:' + th.ink + ';--muted:' + th.muted + ';--line:' + th.line + ';--accent:' + th.accent;
+    return {
+      rootStyle, sent: this.state.sent, notSent: !this.state.sent, email: this.state.email,
+      onEmail: (e) => this.setState({ email: e.target.value }),
+      send: () => this.setState({ sent: true }),
+      back: () => this.setState({ sent: false })
+    };
+  }
+}
+</script>
+</body>
+</html>

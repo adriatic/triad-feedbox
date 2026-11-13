@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Feedbox board: Lumen</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:inherit;text-decoration:none}
+.ttl:hover{text-decoration:underline}
+.vote:hover{border-color:var(--accent)}
+.tab:hover{color:var(--ink)}
+button{font-family:inherit}
+input,select{font-family:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+</style>
+</helmet>
+<div style="{{rootStyle}}; min-height: 900px; background: var(--bg); color: var(--ink); font-family: Inter, system-ui, sans-serif; font-size: 15px; line-height: 1.5">
+  <header style="background: var(--card); border-bottom: 1px solid var(--line)">
+    <div style="max-width: 920px; margin: 0 auto; padding: 14px 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+      <div style="display: flex; align-items: center; gap: 10px; flex-grow: 1">
+        <div style="width: 28px; height: 28px; border-radius: 8px; background: var(--accent); color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-weight: 700">L</div>
+        <span style="font-weight: 600; font-size: 17px">Lumen</span>
+        <span style="color: var(--muted)">Feedback and roadmap</span>
+      </div>
+      <span style="font-size: 13px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px">Viewing as visitor</span>
+      <a href="SignIn.dc.html" style="font-weight: 500; border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px">Sign in</a>
+    </div>
+  </header>
+  <main style="max-width: 920px; margin: 0 auto; padding: 32px 24px 64px; display: flex; flex-direction: column; gap: 20px">
+    <div style="display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px">
+      <div style="flex-grow: 1; min-width: 260px">
+        <h1 style="margin: 0; font-size: 28px; line-height: 1.2">What should Lumen do next?</h1>
+        <p style="margin: 6px 0 0; color: var(--muted)">Vote for what you need, or post a new idea. The Lumen team moves ideas to Planned, Building and Shipped.</p>
+      </div>
+      <a href="PostIdea.dc.html" style="background: var(--accent); color: #FFFFFF; font-weight: 600; border-radius: 10px; padding: 12px 20px">Post an idea</a>
+    </div>
+    <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; border-bottom: 1px solid var(--line)">
+      <div role="tablist" style="display: flex; flex-wrap: wrap; gap: 4px; flex-grow: 1">
+        <sc-for list="{{tabs}}" as="tab" hint-placeholder-count="4">
+          <button class="tab" role="tab" aria-selected="{{tab.selected}}" onClick="{{ tab.pick }}" style="background: none; border: none; border-bottom: 3px solid {{tab.line}}; color: {{tab.color}}; font-size: 15px; font-weight: 600; padding: 10px 14px; cursor: pointer; min-height: 44px">{{tab.label}} <span style="font-weight: 400">{{tab.count}}</span></button>
+        </sc-for>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding-bottom: 8px">
+        <label style="display: flex; align-items: center; gap: 8px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 0 10px; min-height: 44px">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+          <span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Search ideas</span>
+          <input type="search" placeholder="Search ideas" value="{{query}}" onInput="{{onSearch}}" style="border: none; background: none; color: var(--ink); font-size: 15px; width: 160px; outline: none">
+        </label>
+        <button onClick="{{toggleSort}}" style="background: var(--card); border: 1px solid var(--line); color: var(--ink); border-radius: 8px; padding: 0 14px; min-height: 44px; font-size: 15px; cursor: pointer">Sort: {{sortLabel}}</button>
+      </div>
+    </div>
+    <ul style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px">
+      <sc-for list="{{rows}}" as="item" hint-placeholder-count="4">
+        <li style="background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; display: flex; gap: 18px; align-items: flex-start">
+          <button class="vote" onClick="{{ item.vote }}" aria-pressed="{{item.voted}}" aria-label="{{item.voteLabel}}" style="flex-shrink: 0; width: 64px; border: 2px solid {{item.voteBorder}}; background: {{item.voteBg}}; color: {{item.voteFg}}; border-radius: 12px; padding: 8px 0; display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; font-size: 17px; font-weight: 700">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>
+            <span>{{item.votes}}</span>
+          </button>
+          <div style="flex-grow: 1; min-width: 0">
+            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+              <a class="ttl" href="Idea.dc.html" style="font-size: 17px; font-weight: 600">{{item.title}}</a>
+              <span style="background: {{item.chipBg}}; color: {{item.chipFg}}; font-size: 13px; font-weight: 600; border-radius: 999px; padding: 2px 10px">{{item.status}}</span>
+            </div>
+            <p style="margin: 4px 0 8px; color: var(--muted)">{{item.desc}}</p>
+            <span style="font-size: 13px; color: var(--muted)">{{item.comments}} comments</span>
+          </div>
+        </li>
+      </sc-for>
+    </ul>
+    <sc-if value="{{isEmpty}}" hint-placeholder-val="{{false}}">
+      <p style="color: var(--muted); text-align: center; margin: 24px 0">No ideas match your search.</p>
+    </sc-if>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"accent":{"editor":"color","default":"#4338CA"},"$preview":{"width":1280,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { tab: 'Open', voted: {}, q: '', sort: 'Top' };
+  }
+  renderVals() {
+    const dark = !!this.props.dark;
+    const accent = this.props.accent || '#4338CA';
+    const th = dark
+      ? { bg: '#0F1115', card: '#171A21', ink: '#ECEEF3', muted: '#A3ABBA', line: '#2A2F3A', accent: '#8B93FF',
+          open: ['#2A2F3A', '#D5DAE5'], planned: ['#1B2B5C', '#C9D8FF'], building: ['#4A2F08', '#FFD9A0'], shipped: ['#12402B', '#B8EBD0'], votedFg: '#0F1115' }
+      : { bg: '#F6F7F9', card: '#FFFFFF', ink: '#16181D', muted: '#5B6270', line: '#E3E5EA', accent: accent,
+          open: ['#ECEEF2', '#3A4150'], planned: ['#E0EAFF', '#1E3A8A'], building: ['#FDEBC8', '#7A3E00'], shipped: ['#D8F3E3', '#0F5132'], votedFg: '#FFFFFF' };
+    const rootStyle = '--bg:' + th.bg + ';--card:' + th.card + ';--ink:' + th.ink + ';--muted:' + th.muted + ';--line:' + th.line + ';--accent:' + th.accent;
+    const all = [
+      { id: 1, title: 'Dark mode for the editor', desc: 'A true dark theme for the editor and sidebar that follows the system setting.', votes: 214, status: 'Planned', comments: 18 },
+      { id: 2, title: 'Export notes to Markdown', desc: 'Export one note or a whole notebook as plain .md files, with images alongside.', votes: 187, status: 'Building', comments: 24 },
+      { id: 3, title: 'Offline mode', desc: 'Keep writing without a connection and merge changes when it returns.', votes: 132, status: 'Planned', comments: 11 },
+      { id: 4, title: 'Keyboard shortcut cheat sheet', desc: 'A one-page list of every shortcut, opened with a single key.', votes: 96, status: 'Shipped', comments: 6 },
+      { id: 5, title: 'Faster startup on large notebooks', desc: 'Open a notebook with 5,000 notes in under two seconds.', votes: 88, status: 'Shipped', comments: 9 },
+      { id: 6, title: 'Sync between two laptops', desc: 'Keep the same notes on a work and a home laptop without a cloud account.', votes: 73, status: 'Open', comments: 14 },
+      { id: 7, title: 'Search inside attachments', desc: 'Find text inside PDFs and images attached to a note.', votes: 58, status: 'Open', comments: 5 },
+      { id: 8, title: 'Share a note by link', desc: 'A read-only link to a single note that anyone can open.', votes: 49, status: 'Open', comments: 8 },
+      { id: 9, title: 'Tag notes by colour', desc: 'Give each tag a colour and show it in the note list.', votes: 41, status: 'Open', comments: 3 }
+    ];
+    const q = this.state.q.trim().toLowerCase();
+    const voted = this.state.voted;
+    const withVotes = all.map((i) => ({ ...i, v: i.votes + (voted[i.id] ? 1 : 0) }));
+    const names = ['Open', 'Planned', 'Building', 'Shipped'];
+    const tabs = names.map((n) => ({
+      label: n,
+      count: withVotes.filter((i) => i.status === n).length,
+      selected: this.state.tab === n,
+      line: this.state.tab === n ? th.accent : 'transparent',
+      color: this.state.tab === n ? th.ink : th.muted,
+      pick: () => this.setState({ tab: n })
+    }));
+    let list = withVotes.filter((i) => i.status === this.state.tab && (!q || (i.title + ' ' + i.desc).toLowerCase().includes(q)));
+    list = list.sort((a, b) => (this.state.sort === 'Top' ? b.v - a.v : b.id - a.id));
+    const rows = list.map((i) => {
+      const on = !!voted[i.id];
+      const c = th[i.status.toLowerCase()];
+      return {
+        title: i.title, desc: i.desc, status: i.status, comments: i.comments, votes: i.v,
+        chipBg: c[0], chipFg: c[1], voted: on,
+        voteLabel: (on ? 'Remove your vote from ' : 'Vote for ') + i.title + ', ' + i.v + ' votes',
+        voteBorder: on ? th.accent : th.line, voteBg: on ? th.accent : th.card, voteFg: on ? th.votedFg : th.ink,
+        vote: () => this.setState({ voted: { ...voted, [i.id]: !on } })
+      };
+    });
+    return {
+      rootStyle, tabs, rows, isEmpty: rows.length === 0, query: this.state.q, sortLabel: this.state.sort,
+      onSearch: (e) => this.setState({ q: e.target.value }),
+      toggleSort: () => this.setState({ sort: this.state.sort === 'Top' ? 'New' : 'Top' })
+    };
+  }
+}
+</script>
+</body>
+</html>
