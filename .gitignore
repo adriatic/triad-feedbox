@@ -1,0 +1,31 @@
+# dependencies
+/node_modules
+
+# Next.js and build output
+/.next/
+/out/
+/build
+next-env.d.ts
+*.tsbuildinfo
+
+# test output
+/coverage
+/test-results/
+/playwright-report/
+
+# environment files: never committed (see CLAUDE.md, rule 3)
+.env*
+
+# Supabase local state
+/supabase/.temp/
+/supabase/.branches/
+
+# editors and OS
+.DS_Store
+.vscode/
+.idea/
+*.log
+npm-debug.log*
+
+# Vercel
+.vercel
