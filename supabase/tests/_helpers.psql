@@ -1,0 +1,78 @@
+-- Shared helpers for the Feedbox database tests. Included by every test file
+-- with \ir. Everything here is created inside the test's own transaction and
+-- rolled back at the end, so nothing stays in the database.
+
+create extension if not exists pgtap with schema extensions;
+set search_path = public, extensions;
+
+create schema tests;
+grant usage on schema tests to anon, authenticated;
+
+-- A person who has signed up. With p_name, the display name is set too.
+create function tests.person(p_handle text, p_name text default null)
+returns uuid language plpgsql as $$
+declare
+  v_id uuid := md5('feedbox-test-' || p_handle)::uuid;
+begin
+  insert into auth.users (instance_id, id, aud, role, email, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
+  values ('00000000-0000-0000-0000-000000000000', v_id, 'authenticated', 'authenticated',
+          p_handle || '@feedbox.test', '{}', '{}', now(), now());
+  if p_name is not null then
+    update public.profiles set display_name = p_name where id = v_id;
+  end if;
+  return v_id;
+end;
+$$;
+
+create function tests.id(p_handle text) returns uuid language sql immutable as $$
+  select md5('feedbox-test-' || p_handle)::uuid;
+$$;
+
+create function tests.board(p_slug text) returns uuid language sql as $$
+  insert into public.boards (slug, name) values (p_slug, initcap(p_slug)) returning id;
+$$;
+
+create function tests.board_id(p_slug text) returns uuid language sql stable as $$
+  select id from public.boards where slug = p_slug;
+$$;
+
+create function tests.idea(p_board text, p_author text, p_title text,
+                           p_status public.idea_status default 'open')
+returns bigint language sql as $$
+  insert into public.ideas (board_id, author_id, title, status)
+  values (tests.board_id(p_board), tests.id(p_author), p_title, p_status)
+  returning id;
+$$;
+
+-- Test boards never use the slug "lumen" (the seed board), so titles cannot clash.
+-- Security definer so a test can name a hidden idea while acting as a visitor.
+create function tests.idea_id(p_title text) returns bigint language sql stable security definer as $$
+  select i.id from public.ideas i join public.boards b on b.id = i.board_id
+  where i.title = p_title and b.slug <> 'lumen';
+$$;
+
+-- A changelog entry's id by title (test boards only), visible to every role.
+create function tests.entry_id(p_title text) returns uuid language sql stable security definer as $$
+  select e.id from public.changelog_entries e join public.boards b on b.id = e.board_id
+  where e.title = p_title and b.slug <> 'lumen';
+$$;
+
+-- Act as a signed-in person, as a visitor, or as the database owner again.
+create function tests.as_person(p_handle text) returns void language plpgsql as $$
+begin
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', tests.id(p_handle), 'role', 'authenticated')::text, true);
+  perform set_config('request.jwt.claim.sub', tests.id(p_handle)::text, true);
+  set local role authenticated;
+end;
+$$;
+
+create function tests.as_visitor() returns void language plpgsql as $$
+begin
+  perform set_config('request.jwt.claims', json_build_object('role', 'anon')::text, true);
+  perform set_config('request.jwt.claim.sub', '', true);
+  set local role anon;
+end;
+$$;
+
+grant execute on all functions in schema tests to anon, authenticated;
