@@ -14,14 +14,16 @@ Feedbox is the worked example for an article about TRIAD (Tracker-Recorded, Inde
 - Every git and GitHub action runs as the account `adriatic`. There is no second account.
 - **Before any git command, run `git rev-parse --show-toplevel`** and check that it prints `/Users/nikolajivancic/Work/triad-feedbox`.
 - Remote `origin` is `git@github.com:adriatic/triad-feedbox.git`. Push over SSH; the key for github.com is set in `~/.ssh/config`.
-- The `gh` CLI is not installed. Open pull requests and read checks through the GitHub REST API with `curl` and the `GH_TOKEN` environment variable, for example `POST https://api.github.com/repos/adriatic/triad-feedbox/pulls`. Never print the token.
-- The token cannot create repositories or change repository settings, and you must not try to.
+- The `gh` CLI is not installed. Read checks, statuses and pull requests through the GitHub REST API with `curl` and the `GH_TOKEN` environment variable. Never print the token.
+- What the token can and cannot do (checked in F1 and F2): it can read the repository, check runs and commit statuses. It **cannot** create repositories, change settings, or create pull requests (`403 Resource not accessible by personal access token`). Do not look for other credentials.
+- So, until Nik grants the token "Pull requests: write": push the branch, then give Nik the compare link `https://github.com/adriatic/triad-feedbox/compare/main...<branch>?expand=1` and the pull-request title and text in the report, and Nik clicks **Create pull request**.
+- CI runs on the branch push itself, and Vercel builds a Preview for every pushed branch at `https://triad-feedbox-git-<branch>-nikolaj-ivancics-projects.vercel.app`, so checks and the Preview can be verified before the pull request exists.
 
 ## Branches, pull requests and merging
 1. Each task works on its own branch from `main`, named `f<n>-<topic>` (for example `f2-core`), and opens exactly ONE pull request into `main`.
 2. Never push to `main` directly. The ruleset on `main` restricts deletions, blocks force pushes and requires a pull request (0 approvals). Required status checks are added in M2.
 3. **Never merge** in a build task. Merging is a separate merge task (M2, M3, …), given only after Nik says "merge" in his chat with Claude.ai. Nik's word, with its time, is recorded in the TRIAD tracker, and the merge task message quotes it.
-4. A merge task: confirm the pull request's checks are green, squash-merge through the API, confirm that the Production deployment of `main` succeeds, and report.
+4. A merge task: confirm the pull request's checks are green, squash-merge (through the API once the token may write pull requests; until then, Nik clicks **Squash and merge**), confirm that the Production deployment of `main` succeeds, and report.
 5. CI checks (GitHub Actions workflow `CI`): `lint`, `typecheck`, `unit`.
 
 ## Three rules that are never broken
