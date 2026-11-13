@@ -14,16 +14,19 @@ Feedbox is the worked example for an article about TRIAD (Tracker-Recorded, Inde
 - Every git and GitHub action runs as the account `adriatic`. There is no second account.
 - **Before any git command, run `git rev-parse --show-toplevel`** and check that it prints `/Users/nikolajivancic/Work/triad-feedbox`.
 - Remote `origin` is `git@github.com:adriatic/triad-feedbox.git`. Push over SSH; the key for github.com is set in `~/.ssh/config`.
-- The `gh` CLI is not installed. Read checks, statuses and pull requests through the GitHub REST API with `curl` and the `GH_TOKEN` environment variable. Never print the token.
-- What the token can and cannot do (checked in F1 and F2): it can read the repository, check runs and commit statuses. It **cannot** create repositories, change settings, or create pull requests (`403 Resource not accessible by personal access token`). Do not look for other credentials.
-- So, until Nik grants the token "Pull requests: write": push the branch, then give Nik the compare link `https://github.com/adriatic/triad-feedbox/compare/main...<branch>?expand=1` and the pull-request title and text in the report, and Nik clicks **Create pull request**.
+- **GitHub CLI:** `gh` is the single program `~/gh-cli` (not on `PATH`, not a folder). Use its stored sign-in (account `adriatic`, macOS keychain, in `~/.config/gh`) by putting **`env -u GH_TOKEN`** before every command. The shell's `GH_TOKEN` is limited to chosen repositories and is refused here.
+  - Read-only check: `env -u GH_TOKEN ~/gh-cli api repos/adriatic/triad-feedbox --jq .full_name`
+  - Open a pull request (after pushing the branch): `env -u GH_TOKEN ~/gh-cli pr create --repo adriatic/triad-feedbox --base main --head <branch> --title "..." --body-file <file>`
+  - Checks: `env -u GH_TOKEN ~/gh-cli pr checks <number> --repo adriatic/triad-feedbox`
+  - Merge, only in a merge task: `env -u GH_TOKEN ~/gh-cli pr merge <number> --repo adriatic/triad-feedbox --squash --match-head-commit <approved sha>`
+- **Never print, copy or move a token.** Never run `gh auth token`, never use `--show-token`, never echo `GH_TOKEN`. Never open key or environment files; refer to them by name only. Do not look for other credentials.
 - CI runs on the branch push itself, and Vercel builds a Preview for every pushed branch at `https://triad-feedbox-git-<branch>-nikolaj-ivancics-projects.vercel.app`, so checks and the Preview can be verified before the pull request exists.
 
 ## Branches, pull requests and merging
 1. Each task works on its own branch from `main`, named `f<n>-<topic>` (for example `f2-core`), and opens exactly ONE pull request into `main`.
 2. Never push to `main` directly. The ruleset on `main` restricts deletions, blocks force pushes and requires a pull request (0 approvals). Required status checks are added in M2.
 3. **Never merge** in a build task. Merging is a separate merge task (M2, M3, …), given only after Nik says "merge" in his chat with Claude.ai. Nik's word, with its time, is recorded in the TRIAD tracker, and the merge task message quotes it.
-4. A merge task: confirm the pull request's checks are green, squash-merge (through the API once the token may write pull requests; until then, Nik clicks **Squash and merge**), confirm that the Production deployment of `main` succeeds, and report.
+4. A merge task: check that the branch head is the approved commit, confirm the pull request's checks are green, squash-merge with gh (`--match-head-commit`), delete the branch, confirm that the Production deployment of `main` succeeds, tag the merge commit `f<n>`, and report.
 5. CI checks (GitHub Actions workflow `CI`): `lint`, `typecheck`, `unit`.
 
 ## Three rules that are never broken
