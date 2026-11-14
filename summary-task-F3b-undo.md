@@ -117,7 +117,17 @@ The counts were the same before and after:
 
 ## CI results (on `fb13cc7`)
 
-CI_RESULTS
+Both workflow runs concluded `success` on head `fb13cc76dcbd9e8dedfe98518b83cbe37a328786`: https://github.com/adriatic/triad-feedbox/actions/runs/43536645817 (push) and https://github.com/adriatic/triad-feedbox/actions/runs/43536727913 (pull_request).
+
+| Check | Result |
+|---|---|
+| `lint` | pass (push 22s; pull_request 16s) |
+| `typecheck` | pass (push 22s; pull_request 23s) |
+| `unit` | pass (push 25s; pull_request 15s) |
+| `db` | pass (push 39s; pull_request 45s). Log: `Files=10, Tests=225, Result: PASS` |
+| `Vercel` | pass (Preview deployment completed) |
+
+CI does not run the undo script itself. It was tested locally, as described above.
 
 ## Steps for Nik, later
 
