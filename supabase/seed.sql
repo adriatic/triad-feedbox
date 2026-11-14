@@ -1,3 +1,4 @@
+-- supabase/seed.sql | 213 lines | last line: -- end of seed.sql
 -- =============================================================================
 -- Feedbox seed: the invented "Lumen" board from the design brief.
 -- For LOCAL Supabase and feedbox-preview ONLY. Never run it on feedbox-prod.
@@ -15,13 +16,16 @@
 --   counts stay right when someone votes or unvotes. (Posting an idea casts the
 --   author's vote; the other votes come from 213 invented voters.)
 -- * It refuses to run twice: if a board "lumen" exists, it stops and changes
---   nothing.
+--   nothing. If the script was pasted twice into one query, the message says
+--   so.
 -- =============================================================================
 
 do $seed$
 declare
-  v_board uuid;
-  v_wrong text;
+  v_board    uuid;
+  v_wrong    text;
+  v_same_txn boolean;
+  v_at       timestamptz;
   -- Ideas (design brief and screens): title, body, status, votes, author,
   -- created_at, shipped_at. Read below with jsonb_to_recordset.
   v_ideas constant jsonb := $ideas$[
@@ -58,10 +62,16 @@ declare
   ]$ideas$::jsonb;
 begin
   -- ---------------------------------------------------------------------------
-  -- Refuse to run twice.
+  -- Refuse to run twice (also when pasted twice into one query).
   -- ---------------------------------------------------------------------------
-  if exists (select 1 from public.boards where slug = 'lumen') then
-    raise exception 'The Lumen board already exists. The seed has run before; nothing was changed.';
+  select b.xmin::text = (pg_current_xact_id()::xid)::text, b.created_at
+    into v_same_txn, v_at
+  from public.boards b where b.slug = 'lumen';
+  if v_same_txn then
+    raise exception 'Refused: this script was pasted twice into one query. Nothing was changed: the whole query is undone. Clear the editor, paste the script once and run it again.';
+  end if;
+  if v_at is not null then
+    raise exception 'Refused: the Lumen board already exists (created %). The seed has run before, or this script was pasted twice into one query. Nothing was changed by this copy.', v_at;
   end if;
 
   -- ---------------------------------------------------------------------------
@@ -200,3 +210,4 @@ begin
   end if;
 end;
 $seed$;
+-- end of seed.sql

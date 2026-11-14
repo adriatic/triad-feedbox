@@ -66,3 +66,6 @@ jobs:
       # and supabase/seed.sql. Never a hosted project; no keys are used.
       - run: npx supabase db start
       - run: npx supabase test db
+      # The check scripts in supabase/checks/ and every changing script, run
+      # the way the SQL Editor runs them, on the right and the wrong states.
+      - run: npm run test:checks

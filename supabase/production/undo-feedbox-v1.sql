@@ -1,3 +1,4 @@
+-- supabase/production/undo-feedbox-v1.sql | 103 lines | last line: -- end of undo-feedbox-v1.sql
 -- =============================================================================
 -- Undo the Feedbox v1 migration (20261113000000_feedbox_v1.sql) on a project
 -- where it was applied but no Feedbox data was ever saved. Task F3b, for
@@ -32,7 +33,7 @@ begin
   -- ---------------------------------------------------------------------------
   foreach v_table in array v_tables loop
     if to_regclass('public.' || v_table) is null then
-      raise exception 'Refused: table public.% does not exist, so this is not the state this script was written for. Nothing was changed.', v_table;
+      raise exception 'Refused: table public.% does not exist. The undo has already run, this script was pasted twice into one query, or this is the wrong project. Nothing was changed by this copy.', v_table;
     end if;
     execute format('select exists (select 1 from public.%I)', v_table) into v_has_rows;
     if v_has_rows then
@@ -99,3 +100,4 @@ begin
   drop schema private;
 end;
 $undo$;
+-- end of undo-feedbox-v1.sql

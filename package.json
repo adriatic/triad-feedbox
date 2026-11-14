@@ -18,7 +18,9 @@
     "db:start": "supabase db start",
     "db:reset": "supabase db reset",
     "db:stop": "supabase stop --no-backup",
-    "test:db": "supabase test db"
+    "test:db": "supabase test db",
+    "test:checks": "bash scripts/test-sql-checks.sh",
+    "sql:headers": "node scripts/sql-files.ts --fix"
   },
   "dependencies": {
     "next": "16.4.6",
