@@ -81,10 +81,20 @@ Every query Nik runs is written, tested and reviewed like any other code. Nik ne
 
   Then, for each script: click **+ New query**, paste from the pinned link, and check that the editor shows the header line and, at the bottom, the last line it names, before clicking **Run**.
 
+## Is TRIAD ready?
+`scripts/triad-ready.sh` (task T1) tells Nik, line by line, whether every piece of TRIAD is in place on the Mac before a session. Nik runs it in a NEW Terminal tab (not inside Claude Code):
+
+    /Users/nikolajivancic/Work/triad-feedbox/scripts/triad-ready.sh
+
+- It prints `PASS` or `FAIL`, the check's name and what it found; every `FAIL` says what to do. The last line is `READY: all N checks passed.` or `NOT READY: K of N checks failed.` (exit code 0 or 1).
+- The 19 checks, in order: macOS version (information); Claude desktop app running; Chrome running; Claude Code installed; Node.js matches `.nvmrc`; the project folder is a clone of `adriatic/triad-feedbox` (and its branch); the git working tree (information); the reports folder exists, can be written to and holds `feedbox-inputs`; the Obsidian vault and its TRIAD folder; Docker running; the stored GitHub sign-in can read the repository; git reaches GitHub over SSH; the `cc-reports` branch exists; `main` requires `lint`, `typecheck`, `unit`, `db` and `Vercel`; the latest CI run on `main` passed; Vercel Production answers; Vercel's status on `main`'s latest commit is success; Supabase feedbox-preview answers; Supabase feedbox-prod answers (both asked with no key; project IDs from the Obsidian note `TRIAD/Important URLs.md`).
+- It only reads: it changes, installs, starts, stops and signs in to nothing, sends no key, and every network check has a time limit. The `TRIAD_*` variables in its header point checks at wrong places, for testing only. `tests/triad-ready.test.ts` keeps those rules in `unit`.
+- When you add a piece to TRIAD, add its check here, in README.md and in the script, and update the count of checks in all three places and in `tests/triad-ready.test.ts`.
+
 ## Layout
 - `app/`: Next.js App Router routes
 - `lib/feedbox/`: core library. Pure TypeScript with **no** Supabase or Next imports; unit tests sit beside the code as `*.test.ts`
 - `design/`: design brief and the six screen sources (part of the app's definition)
 - `supabase/`: `config.toml` (local only), `migrations/`, `seed.sql`, `production/`, `checks/` (read-only check scripts), `marker/` (project markers), `tests/`, `templates/`
-- `scripts/`: `sql-files.ts` (header lines of pasted SQL) and `test-sql-checks.sh` (tests of check and changing scripts); `tests/`: repository-level unit tests (`tests/sql-files.test.ts`)
+- `scripts/`: `sql-files.ts` (header lines of pasted SQL), `test-sql-checks.sh` (tests of check and changing scripts) and `triad-ready.sh` (is TRIAD ready on the Mac); `tests/`: repository-level unit tests (`tests/sql-files.test.ts`, `tests/triad-ready.test.ts`)
 - Later tasks add `e2e/`, `components/`, `screenshots/`, `TRIAD.md` and `templates/` (at the root)
