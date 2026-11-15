@@ -50,3 +50,22 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+
+  db:
+    name: db
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # Local Supabase database in Docker on the runner: applies the migration
+      # and supabase/seed.sql. Never a hosted project; no keys are used.
+      - run: npx supabase db start
+      - run: npx supabase test db
+      # The check scripts in supabase/checks/ and every changing script, run
+      # the way the SQL Editor runs them, on the right and the wrong states.
+      - run: npm run test:checks
