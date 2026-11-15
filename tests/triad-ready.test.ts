@@ -44,6 +44,16 @@ describe("scripts/triad-ready.sh", () => {
     }
   });
 
+  it("has 19 checks, among them both Supabase projects", () => {
+    const names = new Set<string>();
+    for (const m of code.matchAll(/\b(?:pass|fail|supabase_check) "([^"$]+(?:\$MAIN_BRANCH)?)"/g)) names.add(m[1] ?? "");
+    expect([...names]).toHaveLength(19);
+    expect(names).toContain("Supabase feedbox-preview");
+    expect(names).toContain("Supabase feedbox-prod");
+    expect(code).toContain('PROD_REF="${TRIAD_PROD_REF:-imlitxtkpvrcmijgdsrw}"');
+    expect(code).toContain('PREVIEW_REF="${TRIAD_PREVIEW_REF:-qrbeiveyomidfafivuta}"');
+  });
+
   it("gives every network check a time limit", () => {
     for (const line of code.split("\n").filter((l) => /\bcurl\b/.test(l))) {
       expect(line).toMatch(/limited "\$TIMEOUT" curl .*-m "\$TIMEOUT"/);

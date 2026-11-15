@@ -41,10 +41,14 @@
 #   TRIAD_PREVIEW_REF      feedbox-preview project ID (default qrbeiveyomidfafivuta)
 #   TRIAD_PREVIEW_URL      address asked for feedbox-preview
 #                          (default https://<TRIAD_PREVIEW_REF>.supabase.co/auth/v1/health)
+#   TRIAD_PROD_REF         feedbox-prod project ID (default imlitxtkpvrcmijgdsrw)
+#   TRIAD_PROD_SUPABASE_URL address asked for feedbox-prod
+#                          (default https://<TRIAD_PROD_REF>.supabase.co/auth/v1/health)
 # =============================================================================
 
 HOME_DIR="/Users/nikolajivancic"
 TIMEOUT="${TRIAD_TIMEOUT:-10}"
+case "$TIMEOUT" in ''|*[!0-9]*) TIMEOUT=10 ;; esac
 CLAUDE_APP="${TRIAD_CLAUDE_APP:-/Applications/Claude.app/Contents/MacOS/Claude}"
 CHROME_APP="${TRIAD_CHROME_APP:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}"
 CLAUDE_CMD="${TRIAD_CLAUDE_CMD:-}"
@@ -60,6 +64,7 @@ REPORTS_BRANCH="${TRIAD_REPORTS_BRANCH:-cc-reports}"
 REQUIRED_CHECKS="${TRIAD_REQUIRED_CHECKS:-lint typecheck unit db Vercel}"
 PROD_URL="${TRIAD_PROD_URL:-https://triad-feedbox-delta.vercel.app}"
 PREVIEW_REF="${TRIAD_PREVIEW_REF:-qrbeiveyomidfafivuta}"
+PROD_REF="${TRIAD_PROD_REF:-imlitxtkpvrcmijgdsrw}"
 
 # Common tool folders, in case the new Terminal tab has a short PATH.
 PATH="$PATH:$HOME_DIR/.local/bin:/opt/homebrew/bin:/usr/local/bin"
@@ -110,7 +115,7 @@ fi
 
 # --- 2. Claude desktop app -------------------------------------------------------
 if running "$CLAUDE_APP"; then
-  pass "Claude desktop app" "running. Claude.ai can reach the reports folder and the Obsidian notes."
+  pass "Claude desktop app" "running (this check cannot see whether its link to Claude.ai works)."
 else
   fail "Claude desktop app" "not running, so Claude.ai cannot reach the files on this Mac. Open the Claude app from the Dock (or Finder, Applications, Claude) and leave it open."
 fi
@@ -193,7 +198,7 @@ elif [ ! -d "$REPORTS_DIR/feedbox-inputs" ]; then
   fail "Reports folder" "$REPORTS_DIR has no subfolder feedbox-inputs (the design inputs). Tell Claude Code."
 else
   REPORTS_N="$(ls "$REPORTS_DIR" 2>/dev/null | grep -c '^summary-task-.*\.md$')"
-  pass "Reports folder" "$REPORTS_DIR exists and can be written to; it holds feedbox-inputs and $REPORTS_N summary-task reports."
+  pass "Reports folder" "$REPORTS_DIR exists and has write permission (nothing was written); it holds feedbox-inputs and $REPORTS_N summary-task reports."
 fi
 
 # --- 9. Obsidian vault and TRIAD folder -------------------------------------------------------
@@ -207,7 +212,7 @@ fi
 
 # --- 10. Docker -----------------------------------------------------------------------------------
 if limited "$TIMEOUT" "$DOCKER_CMD" info --format '{{.ServerVersion}}' && [ -n "$(head -n 1 "$TMP_OUT")" ]; then
-  pass "Docker" "running (Docker $(head -n 1 "$TMP_OUT")); the local database tests can run."
+  pass "Docker" "running (Docker $(head -n 1 "$TMP_OUT")). The local database itself is not looked at."
 else
   fail "Docker" "not running, so the local database tests cannot run. In Terminal, type colima start and press Return (it takes about a minute), then run this check again."
 fi
@@ -230,7 +235,7 @@ if [ "$PROJECT_OK" != 1 ]; then
 elif GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=$TIMEOUT" \
      limited "$TIMEOUT" git -C "$PROJECT_DIR" ls-remote --heads origin "$MAIN_BRANCH" \
      && grep -q "refs/heads/$MAIN_BRANCH" "$TMP_OUT"; then
-  pass "git over SSH" "the project folder can read branch $MAIN_BRANCH from GitHub over SSH, the way Claude Code pushes."
+  pass "git over SSH" "the project folder can read branch $MAIN_BRANCH from GitHub over SSH (Claude Code pushes over SSH; a push was not tried)."
 else
   fail "git over SSH" "the project folder cannot read branch $MAIN_BRANCH from GitHub over SSH (no network, or the SSH key is not loaded). Check the network, then tell Claude Code."
 fi
@@ -288,7 +293,7 @@ fi
 if limited "$TIMEOUT" curl -sS -L -m "$TIMEOUT" -o - -w '\nHTTP_CODE=%{http_code}' "$PROD_URL"; then
   CODE="$(sed -n 's/^HTTP_CODE=//p' "$TMP_OUT")"
   if [ "$CODE" = 200 ] && grep -q "Feedbox" "$TMP_OUT"; then
-    pass "Vercel Production" "$PROD_URL answers (HTTP 200, page Feedbox)."
+    pass "Vercel Production" "$PROD_URL answers HTTP 200 and the page contains the word Feedbox."
   else
     fail "Vercel Production" "$PROD_URL answers HTTP ${CODE:-nothing} without the Feedbox page. Open it in Chrome; if it is broken, tell Claude.ai."
   fi
@@ -303,7 +308,7 @@ elif gh_read api "repos/$REPO/commits/$MAIN_BRANCH/status" \
      --jq '[.statuses[] | select(.context == "Vercel") | .state][0] // "none"'; then
   VSTATE="$(head -n 1 "$TMP_OUT")"
   if [ "$VSTATE" = success ]; then
-    pass "Vercel build of $MAIN_BRANCH" "Vercel built the latest commit on $MAIN_BRANCH successfully."
+    pass "Vercel build of $MAIN_BRANCH" "Vercel's status on the latest commit of $MAIN_BRANCH is success."
   else
     fail "Vercel build of $MAIN_BRANCH" "Vercel's state for the latest commit on $MAIN_BRANCH is $VSTATE, not success. If it is pending, wait a few minutes; otherwise tell Claude.ai."
   fi
@@ -311,21 +316,26 @@ else
   fail "Vercel build of $MAIN_BRANCH" "Vercel's state for branch $MAIN_BRANCH could not be read. Tell Claude Code."
 fi
 
-# --- 18. Supabase feedbox-preview -------------------------------------------------------------------------
-# Only the public address is used, with no key: a project that is up answers
-# 401 "No API key found in request". feedbox-prod is not checked: its project
-# ID is not written down anywhere on this Mac (see the T1 report).
-SB_URL="${TRIAD_PREVIEW_URL:-https://$PREVIEW_REF.supabase.co/auth/v1/health}"
-if limited "$TIMEOUT" curl -sS -m "$TIMEOUT" -o - -w '\nHTTP_CODE=%{http_code}' "$SB_URL"; then
-  CODE="$(sed -n 's/^HTTP_CODE=//p' "$TMP_OUT")"
-  if [ "$CODE" = 401 ] && grep -q "No API key found" "$TMP_OUT"; then
-    pass "Supabase feedbox-preview" "project $PREVIEW_REF answers (it asks for a key, as expected; none is sent)."
+# --- 18 and 19. Supabase feedbox-preview and feedbox-prod -----------------------------------------------
+# Only the public address is used, with no key: a project's address that is up
+# answers 401 "No API key found in request". The database itself is not looked
+# at. Project IDs: Obsidian note TRIAD/Important URLs.md, section Supabase.
+supabase_check() { # <check name> <project name> <project ID> <address>
+  if limited "$TIMEOUT" curl -sS -m "$TIMEOUT" -o - -w '\nHTTP_CODE=%{http_code}' "$4"; then
+    CODE="$(sed -n 's/^HTTP_CODE=//p' "$TMP_OUT")"
+    if [ "$CODE" = 401 ] && grep -q "No API key found" "$TMP_OUT"; then
+      pass "$1" "the address of project $3 answers HTTP 401 and asks for a key, as expected (no key is sent; the database itself is not looked at)."
+    else
+      fail "$1" "the address of project $3 answered HTTP ${CODE:-nothing}, not the expected 401. Open the Supabase dashboard in Chrome and check that $2 is not paused; tell Claude.ai."
+    fi
   else
-    fail "Supabase feedbox-preview" "project $PREVIEW_REF answered HTTP ${CODE:-nothing}, not the expected 401. Open the Supabase dashboard in Chrome and check that feedbox-preview is not paused; tell Claude.ai."
+    fail "$1" "the address of project $3 does not answer (no network, wrong project ID, or Supabase down). Check https://status.supabase.com and the Supabase dashboard, then tell Claude.ai."
   fi
-else
-  fail "Supabase feedbox-preview" "project $PREVIEW_REF does not answer (no network, wrong project ID, or Supabase down). Check https://status.supabase.com and the Supabase dashboard, then tell Claude.ai."
-fi
+}
+supabase_check "Supabase feedbox-preview" feedbox-preview "$PREVIEW_REF" \
+  "${TRIAD_PREVIEW_URL:-https://$PREVIEW_REF.supabase.co/auth/v1/health}"
+supabase_check "Supabase feedbox-prod" feedbox-prod "$PROD_REF" \
+  "${TRIAD_PROD_SUPABASE_URL:-https://$PROD_REF.supabase.co/auth/v1/health}"
 
 # --- Overall ---------------------------------------------------------------------------------------------------
 if [ "$FAILED" = 0 ]; then
