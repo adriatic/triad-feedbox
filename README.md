@@ -18,6 +18,16 @@ npm run typecheck
 npm test
 ```
 
+## Is TRIAD ready?
+
+Before a TRIAD session, one command checks every piece on the Mac: the Claude desktop app, Chrome, Claude Code, Node.js, the project, reports and Obsidian folders, Docker, the GitHub sign-in, SSH, the `cc-reports` branch, the required checks and the latest CI run on `main`, Vercel Production and its build of `main`, and the Supabase preview project. Run it in a new Terminal tab:
+
+```sh
+/Users/nikolajivancic/Work/triad-feedbox/scripts/triad-ready.sh
+```
+
+It prints one `PASS` or `FAIL` line per check (each `FAIL` says what to do) and ends with `READY: all N checks passed.` or `NOT READY: K of N checks failed.` It only reads: it changes, starts and signs in to nothing, and needs no key. The paths in it are those of the author's Mac; see the header of [`scripts/triad-ready.sh`](scripts/triad-ready.sh).
+
 The design brief and the six screen sources are in [`design/`](design/).
 
 Licence: MIT, see [LICENSE](LICENSE).
