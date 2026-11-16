@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/lib/supabase/database.types";
+import { supabasePublishableKey, supabaseUrl } from "@/lib/supabase/env";
 
 /**
  * Next.js 16 calls middleware "proxy" (proxy.ts). On every page request it:
@@ -14,8 +15,8 @@ export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    supabaseUrl(),
+    supabasePublishableKey(),
     {
       cookies: {
         getAll() {

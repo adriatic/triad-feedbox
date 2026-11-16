@@ -8,7 +8,7 @@ Status: early build. The core library (`lib/feedbox/`), the database and sign-in
 
 ## Run it locally
 
-Needs Node 24 (see `.nvmrc`). The app reads three settings: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (never a secret key) and `FEEDBOX_BOARD_SLUG` (the one board this deployment shows, for example `lumen` locally). For the local Supabase, `npx supabase status` prints the URL and the publishable key.
+Needs Node 24 (see `.nvmrc`). The app reads three settings: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (never a secret key) and `FEEDBOX_BOARD_SLUG` (the one board this deployment shows, for example `lumen` locally). For the local Supabase, `npx supabase status` prints the URL and the publishable key. A missing setting stops the app with `Missing environment variable <NAME>`.
 
 ```sh
 npm ci
@@ -24,6 +24,19 @@ With Docker running (for example `colima start`), the local Supabase and the end
 npm run e2e:supabase   # local Supabase in Docker
 npm run test:e2e       # Playwright, against the local database only
 ```
+
+## Settings on Vercel
+
+Four settings, each of type Config, set once for Preview and once for Production (project `triad-feedbox`, Settings, Environment Variables):
+
+| Setting | Preview | Production | Value from |
+|---|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | feedbox-preview | feedbox-prod | Supabase dashboard: the project's URL, `https://<project ID>.supabase.co` |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | feedbox-preview | feedbox-prod | Supabase dashboard, Project Settings, API Keys: the publishable key (`sb_publishable_...`) |
+| `FEEDBOX_BOARD_SLUG` | `lumen` | `feedbox` | the board's slug |
+| `NEXT_PUBLIC_SITE_URL` | not set | `https://triad-feedbox-delta.vercel.app` | the Production address |
+
+`NEXT_PUBLIC_` values are built into the code, so a deployment sees a changed setting only after it is built again: push a new commit, or use Redeploy in Vercel.
 
 ## Is TRIAD ready?
 

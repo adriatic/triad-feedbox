@@ -84,6 +84,20 @@ Every query Nik runs is written, tested and reviewed like any other code. Nik ne
 
   Then, for each script: click **+ New query**, paste from the pinned link, and check that the editor shows the header line and, at the bottom, the last line it names, before clicking **Run**.
 
+## App settings on Vercel
+The app reads four settings. In Vercel: project `triad-feedbox`, Settings, Environment Variables. Each is type **Config** (not secret: the two `NEXT_PUBLIC_` values are built into the code the browser gets) and is set once per environment.
+
+| Setting | Preview | Production | Where the value comes from |
+|---|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | feedbox-preview's Project URL | feedbox-prod's Project URL | Supabase dashboard, the project, Connect (or Project Settings, Data API): `https://<project ID>.supabase.co` |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | feedbox-preview's publishable key | feedbox-prod's publishable key | Supabase dashboard, the project, Project Settings, API Keys: the key starting `sb_publishable_` (never a secret key) |
+| `FEEDBOX_BOARD_SLUG` | `lumen` | `feedbox` | The board's slug: `lumen` from `supabase/seed.sql`, `feedbox` from `supabase/production/board-feedbox.sql` |
+| `NEXT_PUBLIC_SITE_URL` | not set (a Preview links back to its own address) | `https://triad-feedbox-delta.vercel.app` | The Production address; it must match feedbox-prod's Site URL and Redirect URLs |
+
+- **A changed setting reaches a deployment only when it is built again.** `NEXT_PUBLIC_` values are copied into the code at build time. After adding or changing a setting, push a new commit to the branch (Vercel builds a new Preview), or in Vercel open Deployments, the deployment's ⋯ menu, **Redeploy**.
+- All settings are read through `lib/supabase/env.ts` (`NEXT_PUBLIC_SITE_URL` through `lib/supabase/site.ts`, where it is optional). A missing one fails with `Missing environment variable <NAME>. ...`, never with Supabase's "URL and Key are required"; `lib/supabase/env.test.ts` keeps this in `unit`.
+- Locally and in CI the values come from `npx supabase status` (the local stack), never from a hosted project.
+
 ## Is TRIAD ready?
 `scripts/triad-ready.sh` (task T1) tells Nik, line by line, whether every piece of TRIAD is in place on the Mac before a session. Nik runs it in a NEW Terminal tab (not inside Claude Code):
 
