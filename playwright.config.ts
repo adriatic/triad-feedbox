@@ -10,6 +10,8 @@ const supabase = localSupabase();
 
 export default defineConfig({
   testDir: "e2e",
+  // Waits until local Supabase sends the Feedbox email templates (task F4b).
+  globalSetup: "./e2e/global-setup.ts",
   fullyParallel: false,
   workers: 1,
   forbidOnly: !!process.env.CI,

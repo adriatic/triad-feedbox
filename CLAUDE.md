@@ -84,6 +84,12 @@ Every query Nik runs is written, tested and reviewed like any other code. Nik ne
 
   Then, for each script: click **+ New query**, paste from the pinned link, and check that the editor shows the header line and, at the bottom, the last line it names, before clicking **Run**.
 
+## Sign-in emails
+- Two Supabase email templates are code, in `supabase/templates/`: `confirmation.html` ("Confirm signup", subject "Your first Feedbox sign-in link", sent on a person's FIRST sign-in) and `magic_link.html` ("Magic Link", subject "Your Feedbox sign-in link", every later sign-in). Both link to `{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=email`, so both land on `/auth/confirm`, which calls `verifyOtp({ type: 'email', token_hash })` only when the button is pressed. Never `{{ .ConfirmationURL }}`: it goes through supabase.co and comes back with `code=`, which `/auth/confirm` does not accept.
+- The hosted projects require email confirmation, and each project's dashboard (Authentication, Emails, Templates) must hold exactly these two subjects and bodies. Nik pastes them; a change to a template file is a step for Nik in both projects.
+- `supabase/config.toml` sets the same for local Supabase (`enable_confirmations = true`, both templates); `tests/email-templates.test.ts` keeps the files and the config in line.
+- In a freshly started local stack, the auth service sends Supabase's default emails for a few seconds (it loads the template files before the gateway that serves them is up). `e2e/global-setup.ts` waits until both Feedbox templates are in use before the end-to-end tests start.
+
 ## App settings on Vercel
 The app reads four settings. In Vercel: project `triad-feedbox`, Settings, Environment Variables. Each is type **Config** (not secret: the two `NEXT_PUBLIC_` values are built into the code the browser gets) and is set once per environment.
 
@@ -113,9 +119,9 @@ The app reads four settings. In Vercel: project `triad-feedbox`, Settings, Envir
 - `proxy.ts`: Next.js 16's middleware: refreshes the Supabase session and sends a signed-in person without a display name to `/welcome`
 - `lib/supabase/`: server and browser clients (`@supabase/ssr`, publishable key only), data reads, generated database types
 - `components/`: shared pieces (the header with the sign-in state)
-- `e2e/`: Playwright tests (local Supabase only)
+- `e2e/`: Playwright tests (local Supabase only); `e2e/global-setup.ts` waits until local Supabase sends the Feedbox email templates
 - `lib/feedbox/`: core library. Pure TypeScript with **no** Supabase or Next imports; unit tests sit beside the code as `*.test.ts`
 - `design/`: design brief and the six screen sources (part of the app's definition)
 - `supabase/`: `config.toml` (local only), `migrations/`, `seed.sql`, `production/`, `checks/` (read-only check scripts), `marker/` (project markers), `tests/`, `templates/`
-- `scripts/`: `sql-files.ts` (header lines of pasted SQL), `test-sql-checks.sh` (tests of check and changing scripts) and `triad-ready.sh` (is TRIAD ready on the Mac); `tests/`: repository-level unit tests (`tests/sql-files.test.ts`, `tests/triad-ready.test.ts`)
+- `scripts/`: `sql-files.ts` (header lines of pasted SQL), `test-sql-checks.sh` (tests of check and changing scripts) and `triad-ready.sh` (is TRIAD ready on the Mac); `tests/`: repository-level unit tests (`tests/sql-files.test.ts`, `tests/triad-ready.test.ts`, `tests/email-templates.test.ts`)
 - Later tasks add `screenshots/`, `TRIAD.md` and `templates/` (at the root)

@@ -9,8 +9,10 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
  * "Send me a link" (F1 section 4, step 2). The link in the email goes to
- * /auth/confirm?next=<path>. The address always holds "?next=", because the
- * Magic Link template appends "&token_hash=…&type=email" to it.
+ * /auth/confirm?next=<path>. The address always holds "?next=", because both
+ * email templates append "&token_hash=…&type=email" to it: "Confirm signup"
+ * for a person's first sign-in, "Magic Link" for every later one
+ * (supabase/templates/, task F4b).
  */
 export async function sendLink(_prev: SendLinkState, form: FormData): Promise<SendLinkState> {
   const email = String(form.get("email") ?? "").trim();

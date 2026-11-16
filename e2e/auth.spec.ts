@@ -103,11 +103,13 @@ test("visitor, first sign-in with a name, member, owner, sign-out", async ({ pag
   await expect(viewerState(page)).toHaveText("Viewing as visitor");
 });
 
-test("the sign-in form sends an email whose link /auth/confirm accepts", async ({ page, baseURL }) => {
-  // Uses the real Magic Link template (supabase/templates/magic_link.html, the
-  // text of F1 Setup step D-12) and the local mail catcher (Mailpit).
-  const email = testEmail("form");
-  await page.goto("/sign-in?next=%2Fchangelog");
+const FIRST_SUBJECT = "Your first Feedbox sign-in link"; // supabase/templates/confirmation.html
+const LATER_SUBJECT = "Your Feedbox sign-in link"; // supabase/templates/magic_link.html
+
+/** Fills the real /sign-in form and returns the link from the email Mailpit caught, after checking its subject. */
+async function linkFromForm(page: Page, baseURL: string, email: string, subject: string, next: string): Promise<string> {
+  const before = await mailIds(email);
+  await page.goto(`/sign-in?next=${encodeURIComponent(next)}`);
   await page.getByLabel("Email").fill(email);
   await page.getByRole("button", { name: "Send me a link" }).click();
   await expect(page.getByRole("heading", { name: "Check your email" })).toBeVisible();
@@ -116,24 +118,75 @@ test("the sign-in form sends an email whose link /auth/confirm accepts", async (
   let message: { ID: string; Subject: string } | undefined;
   await expect
     .poll(async () => {
-      const res = await fetch(`${sb.mailpitUrl}/api/v1/search?query=${encodeURIComponent(`to:"${email}"`)}`);
-      const body = (await res.json()) as { messages?: { ID: string; Subject: string }[] };
-      message = body.messages?.[0];
+      message = (await mailFor(email)).find((m) => !before.includes(m.ID));
       return message?.Subject;
     }, { timeout: 15_000 })
-    .toBe("Your Feedbox sign-in link");
+    .toBe(subject);
   const full = (await (await fetch(`${sb.mailpitUrl}/api/v1/message/${message!.ID}`)).json()) as { HTML: string };
   const href = /href="([^"]+)"/.exec(full.HTML)?.[1]?.replaceAll("&amp;", "&");
-  expect(href).toMatch(new RegExp(`^${baseURL!.replaceAll(".", "\\.")}/auth/confirm\\?next=%2Fchangelog&token_hash=[^&]+&type=email$`));
+  // The same form for a first and a later sign-in: <site>/auth/confirm?next=…&token_hash=…&type=email
+  expect(href).toMatch(
+    new RegExp(`^${baseURL.replaceAll(".", "\\.")}/auth/confirm\\?next=${encodeURIComponent(next)}&token_hash=[^&]+&type=email$`),
+  );
+  return href!;
+}
 
-  await page.goto(href!);
+async function mailFor(email: string): Promise<{ ID: string; Subject: string }[]> {
+  const res = await fetch(`${sb.mailpitUrl}/api/v1/search?query=${encodeURIComponent(`to:"${email}"`)}`);
+  return ((await res.json()) as { messages?: { ID: string; Subject: string }[] }).messages ?? [];
+}
+const mailIds = async (email: string) => (await mailFor(email)).map((m) => m.ID);
+
+/** Opens the link (which must not sign in by itself) and presses the button. */
+async function finishSignIn(page: Page, href: string) {
+  await page.goto(href);
+  await expect(page.getByRole("heading", { name: "Finish signing in" })).toBeVisible();
   await expect(viewerState(page)).toHaveText("Viewing as visitor");
   await page.getByRole("button", { name: "Finish signing in" }).click();
+}
+
+test("a brand-new person signs in through the form and the Confirm signup email", async ({ page, baseURL }) => {
+  // Local Supabase requires email confirmation, like the hosted projects
+  // (supabase/config.toml), so a first sign-in gets the "Confirm signup" email.
+  const email = testEmail("new");
+  const href = await linkFromForm(page, baseURL!, email, FIRST_SUBJECT, "/changelog");
+  await finishSignIn(page, href);
   await expect(page).toHaveURL(/\/welcome\?next=%2Fchangelog$/);
-  await page.getByLabel("Name shown with your ideas").fill("E2E Form");
+  await page.getByLabel("Name shown with your ideas").fill("E2E New");
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page).toHaveURL(/\/changelog$/);
-  await expect(viewerState(page)).toHaveText("Signed in as E2E Form");
+  await expect(viewerState(page)).toHaveText("Signed in as E2E New");
+
+  const { data } = await admin.auth.admin.listUsers({ perPage: 1000 });
+  expect(data.users.find((u) => u.email === email)?.email_confirmed_at).toBeTruthy();
+});
+
+test("a person who already exists signs in through the form and the Magic Link email", async ({ page, baseURL }) => {
+  // First sign-in, name and sign-out, then a second sign-in as the same person.
+  const email = testEmail("again");
+  await finishSignIn(page, await linkFromForm(page, baseURL!, email, FIRST_SUBJECT, "/"));
+  await page.getByLabel("Name shown with your ideas").fill("E2E Again");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(viewerState(page)).toHaveText("Signed in as E2E Again");
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(viewerState(page)).toHaveText("Viewing as visitor");
+
+  const href = await linkFromForm(page, baseURL!, email, LATER_SUBJECT, "/changelog");
+  await finishSignIn(page, href);
+  // The name is not asked again.
+  await expect(page).toHaveURL(/\/changelog$/);
+  await expect(viewerState(page)).toHaveText("Signed in as E2E Again");
+});
+
+test("a person who exists but never confirmed gets the Confirm signup email again, and it works", async ({ page, baseURL }) => {
+  // Nik's case on feedbox-preview: the person was created by an earlier
+  // sign-in whose email link was never used.
+  const email = testEmail("unconfirmed");
+  await admin.auth.admin.createUser({ email, email_confirm: false }).then(({ error }) => { if (error) throw error; });
+  const href = await linkFromForm(page, baseURL!, email, FIRST_SUBJECT, "/");
+  await finishSignIn(page, href);
+  await expect(page).toHaveURL(/\/welcome\?next=%2F$/);
+  await expect(viewerState(page)).toHaveText("Signed in");
 });
 
 test("every route reads the board as a visitor", async ({ page }) => {

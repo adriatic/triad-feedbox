@@ -38,6 +38,8 @@ Four settings, each of type Config, set once for Preview and once for Production
 
 `NEXT_PUBLIC_` values are built into the code, so a deployment sees a changed setting only after it is built again: push a new commit, or use Redeploy in Vercel.
 
+The two sign-in emails ("Confirm signup" for a person's first sign-in, "Magic Link" for every later one) are in [`supabase/templates/`](supabase/templates/); each Supabase project's dashboard must hold the same text.
+
 ## Is TRIAD ready?
 
 Before a TRIAD session, one command runs 19 checks of every piece on the Mac: the Claude desktop app, Chrome, Claude Code, Node.js, the project, reports and Obsidian folders, Docker, the GitHub sign-in, SSH, the `cc-reports` branch, the required checks and the latest CI run on `main`, Vercel Production and its build of `main`, and the two Supabase projects (feedbox-preview and feedbox-prod, asked with no key). Run it in a new Terminal tab:
