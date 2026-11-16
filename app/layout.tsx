@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
+import { Header } from "@/components/Header";
+import { getBoard, getViewer } from "@/lib/supabase/data";
 
 export const metadata: Metadata = {
   title: "Feedbox",
@@ -15,13 +17,22 @@ const baseStyles = `
 body { margin: 0; background: var(--bg); color: var(--ink); font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.5; }
 `;
 
-export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
+  const board = await getBoard();
+  const viewer = await getViewer(board?.id ?? null);
   return (
     <html lang="en">
       <head>
         <style>{baseStyles}</style>
       </head>
-      <body>{children}</body>
+      <body>
+        <div style={{ maxWidth: 720, margin: "0 auto", padding: "16px" }}>
+          <Suspense>
+            <Header board={board} viewer={viewer} />
+          </Suspense>
+          <main>{children}</main>
+        </div>
+      </body>
     </html>
   );
 }

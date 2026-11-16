@@ -4,11 +4,11 @@ Feedbox is a free, open-source feedback and roadmap board. Each product gets a p
 
 It is built with Next.js, Supabase and Vercel, and is the worked example for an article about the TRIAD protocol (Tracker-Recorded, Independently Approved Development).
 
-Status: early build. The core library (`lib/feedbox/`) and an app skeleton exist; the board itself is not built yet.
+Status: early build. The core library (`lib/feedbox/`), the database and sign-in by email link exist; every page is still bare (unstyled) until the screens are built.
 
 ## Run it locally
 
-Needs Node 24 (see `.nvmrc`).
+Needs Node 24 (see `.nvmrc`). The app reads three settings: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (never a secret key) and `FEEDBOX_BOARD_SLUG` (the one board this deployment shows, for example `lumen` locally). For the local Supabase, `npx supabase status` prints the URL and the publishable key.
 
 ```sh
 npm ci
@@ -16,6 +16,13 @@ npm run dev        # http://localhost:3000
 npm run lint
 npm run typecheck
 npm test
+```
+
+With Docker running (for example `colima start`), the local Supabase and the end-to-end tests:
+
+```sh
+npm run e2e:supabase   # local Supabase in Docker
+npm run test:e2e       # Playwright, against the local database only
 ```
 
 ## Is TRIAD ready?

@@ -20,14 +20,20 @@
     "db:stop": "supabase stop --no-backup",
     "test:db": "supabase test db",
     "test:checks": "bash scripts/test-sql-checks.sh",
-    "sql:headers": "node scripts/sql-files.ts --fix"
+    "sql:headers": "node scripts/sql-files.ts --fix",
+    "db:types": "supabase gen types typescript --schema public > lib/supabase/database.types.ts.new && (echo '// Generated from the local database by `npm run db:types` (supabase gen types). Do not edit by hand.'; cat lib/supabase/database.types.ts.new) > lib/supabase/database.types.ts && rm lib/supabase/database.types.ts.new",
+    "e2e:supabase": "supabase start -x studio,imgproxy,storage-api,realtime,edge-runtime,logflare,vector,postgres-meta,supavisor",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@supabase/ssr": "0.12.7",
+    "@supabase/supabase-js": "2.118.0",
     "next": "16.4.6",
     "react": "19.3.1",
     "react-dom": "19.3.1"
   },
   "devDependencies": {
+    "@playwright/test": "1.64.1",
     "@types/node": "24.19.2",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",

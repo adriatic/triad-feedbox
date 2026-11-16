@@ -27,7 +27,7 @@ Feedbox is the worked example for an article about TRIAD (Tracker-Recorded, Inde
 2. Never push to `main` directly. The ruleset on `main` restricts deletions, blocks force pushes, requires a pull request (0 approvals) and requires the status checks `lint`, `typecheck`, `unit` and `Vercel` (since M2; `db` is added in M3).
 3. **Never merge** in a build task. Merging is a separate merge task (M2, M3, …), given only after Nik says "merge" in his chat with Claude.ai. Nik's word, with its time, is recorded in the TRIAD tracker, and the merge task message quotes it.
 4. A merge task: check that the branch head is the approved commit, confirm the pull request's checks are green, squash-merge with gh (`--match-head-commit`), delete the branch, confirm that the Production deployment of `main` succeeds, tag the merge commit `f<n>`, and report.
-5. CI checks (GitHub Actions workflow `CI`): `lint`, `typecheck`, `unit`, `db` (pgTAP tests and `npm run test:checks` on a local Supabase database in Docker on the runner).
+5. CI checks (GitHub Actions workflow `CI`): `lint`, `typecheck`, `unit`, `db` (pgTAP tests and `npm run test:checks` on a local Supabase database in Docker on the runner), `e2e` (since F4: Playwright against the app built on the runner and LOCAL Supabase in Docker; not yet a required check unless Nik decides so).
 
 ## Three rules that are never broken
 1. **You never hold a Supabase secret key**: not in a file on the Mac, not in your shell, not in a commit. The preview secret key exists only as the GitHub Actions secret `SUPABASE_PREVIEW_SECRET_KEY`, used only by CI.
@@ -53,6 +53,9 @@ Supabase projects were created with "Automatically expose new tables" ON and "En
 - `npm run db:stop`: stop this project's local containers only
 - `npm run test:checks`: runs every check script and changing script on the right and the wrong states (local database only; resets it at the start and the end)
 - `npm run sql:headers`: sets the line count in the header line of every pasted SQL file
+- `npm run e2e:supabase`: the full local Supabase stack (database, auth, API, Mailpit) that the end-to-end tests need; `npm run db:start` starts the database only
+- `npm run test:e2e`: Playwright tests in `e2e/` (builds the app, starts it on http://127.0.0.1:3000 with the LOCAL Supabase keys from `supabase status`, never a hosted project)
+- `npm run db:types`: regenerate `lib/supabase/database.types.ts` from the local database (after a migration)
 
 ## Database
 - One migration per database task in `supabase/migrations/`. It must run as one script in the Supabase SQL Editor (no psql commands).
@@ -92,9 +95,13 @@ Every query Nik runs is written, tested and reviewed like any other code. Nik ne
 - When you add a piece to TRIAD, add its check here, in README.md and in the script, and update the count of checks in all three places and in `tests/triad-ready.test.ts`.
 
 ## Layout
-- `app/`: Next.js App Router routes
+- `app/`: Next.js App Router routes: `/`, `/ideas/[id]`, `/ideas/new`, `/changelog`, `/changelog/new`, `/sign-in`, `/auth/confirm`, `/auth/sign-out`, `/welcome`
+- `proxy.ts`: Next.js 16's middleware: refreshes the Supabase session and sends a signed-in person without a display name to `/welcome`
+- `lib/supabase/`: server and browser clients (`@supabase/ssr`, publishable key only), data reads, generated database types
+- `components/`: shared pieces (the header with the sign-in state)
+- `e2e/`: Playwright tests (local Supabase only)
 - `lib/feedbox/`: core library. Pure TypeScript with **no** Supabase or Next imports; unit tests sit beside the code as `*.test.ts`
 - `design/`: design brief and the six screen sources (part of the app's definition)
 - `supabase/`: `config.toml` (local only), `migrations/`, `seed.sql`, `production/`, `checks/` (read-only check scripts), `marker/` (project markers), `tests/`, `templates/`
 - `scripts/`: `sql-files.ts` (header lines of pasted SQL), `test-sql-checks.sh` (tests of check and changing scripts) and `triad-ready.sh` (is TRIAD ready on the Mac); `tests/`: repository-level unit tests (`tests/sql-files.test.ts`, `tests/triad-ready.test.ts`)
-- Later tasks add `e2e/`, `components/`, `screenshots/`, `TRIAD.md` and `templates/` (at the root)
+- Later tasks add `screenshots/`, `TRIAD.md` and `templates/` (at the root)
