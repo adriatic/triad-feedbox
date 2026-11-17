@@ -23,6 +23,8 @@ describe("pasted SQL files", () => {
       "supabase/checks/preview-seed.sql",
       "supabase/checks/prod-ready-for-board.sql",
       "supabase/checks/prod-board.sql",
+      "supabase/production/owner-nik.sql",
+      "supabase/checks/prod-owner.sql",
     ]));
   });
 
@@ -52,6 +54,14 @@ describe("check scripts", () => {
     expect(body).not.toContain("$");
     expect(body).not.toMatch(/\b(insert|update|delete|create|drop|alter|grant|revoke|truncate|do)\s/i);
     expect(body.match(/;/g)?.length).toBe(1);
+  });
+});
+
+describe("changing scripts that check the migration", () => {
+  it("owner-nik.sql uses the fingerprint block of the checks word for word", () => {
+    const shared = read("supabase/checks/prod-board.sql").match(/-- shared:fingerprint:begin[\s\S]*?-- shared:fingerprint:end/)?.[0];
+    expect(shared).toBeDefined();
+    expect(read("supabase/production/owner-nik.sql")).toContain(shared!);
   });
 });
 
