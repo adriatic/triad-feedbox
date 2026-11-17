@@ -10,6 +10,13 @@ const read = (path: string) => readFileSync(join(root, path), "utf8");
 const LINK = '<a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=email">Sign in to Feedbox</a>';
 
 describe("email templates", () => {
+  it("local Mailpit sends as Feedbox <feedbox@pactresearch.net>, like the hosted projects", () => {
+    const toml = read("supabase/config.toml");
+    const smtp = toml.slice(toml.indexOf("[local_smtp]"), toml.indexOf("[storage]"));
+    expect(smtp).toMatch(/^admin_email = "feedbox@pactresearch.net"$/m);
+    expect(smtp).toMatch(/^sender_name = "Feedbox"$/m);
+  });
+
   it.each(["confirmation.html", "magic_link.html"])("%s links to /auth/confirm with token_hash and type=email, nothing else", (file) => {
     const html = read(`supabase/templates/${file}`);
     expect(html).toContain(LINK);
@@ -21,6 +28,7 @@ describe("email templates", () => {
     const toml = read("supabase/config.toml");
     const email = toml.slice(toml.indexOf("[auth.email]"), toml.indexOf("[auth.sms]"));
     expect(email).toMatch(/^enable_confirmations = true$/m);
+    expect(email).toMatch(/^otp_length = 8$/m);
     expect(email).toContain('[auth.email.template.confirmation]\nsubject = "Your first Feedbox sign-in link"\ncontent_path = "./supabase/templates/confirmation.html"');
     expect(email).toContain('[auth.email.template.magic_link]\nsubject = "Your Feedbox sign-in link"\ncontent_path = "./supabase/templates/magic_link.html"');
   });

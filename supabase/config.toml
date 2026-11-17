@@ -115,8 +115,10 @@ port = 55424
 # Uncomment to expose additional ports for testing user applications that send emails.
 # smtp_port = 54325
 # pop3_port = 54326
-# admin_email = "admin@email.com"
-# sender_name = "Admin"
+# The same sender as the hosted projects (custom SMTP through Resend, see CLAUDE.md
+# "Dashboard settings"); Mailpit still catches every email, nothing is sent (task C1).
+admin_email = "feedbox@pactresearch.net"
+sender_name = "Feedbox"
 
 [storage]
 enabled = false
@@ -239,9 +241,11 @@ secure_password_change = false
 # they signed in with a one-time password, magic link, or recovery link.
 # require_current_password = true
 # Controls the minimum amount of time that must pass before sending another signup confirmation or password reset email.
+# Local only: 1 second (the hosted projects have 60), because the e2e tests send
+# two sign-in emails to one address within seconds (CLAUDE.md "Dashboard settings").
 max_frequency = "1s"
-# Number of characters used in the email OTP.
-otp_length = 6
+# Number of characters used in the email OTP. 8, as on the hosted projects (task C1).
+otp_length = 8
 # Number of seconds before the email OTP expires (defaults to 1 hour).
 otp_expiry = 900
 
