@@ -133,18 +133,30 @@ The template files are the source; `tests/email-templates.test.ts` checks them a
 #### URL Configuration (Authentication, URL Configuration)
 | Setting | feedbox-preview | feedbox-prod | Checked |
 |---|---|---|---|
-| Site URL | `http://localhost:3000` | `https://triad-feedbox-delta.vercel.app` | feedbox-prod: Nik, 2026-11-16 4:58 PM. feedbox-preview: set in Setup Part 2; **to be checked** |
-| Redirect URLs | `http://localhost:3000/**` and `https://triad-feedbox-*-nikolaj-ivancics-projects.vercel.app/**` | exactly one: `https://triad-feedbox-delta.vercel.app/**` | feedbox-prod: Nik, 2026-11-16 4:58 PM. feedbox-preview: set in Setup Part 2; **to be checked**, including whether a leftover entry with a team-slug placeholder (`…-<Vercel team slug>.vercel.app/**`) is still listed |
+| Site URL | `http://localhost:3000` | `https://triad-feedbox-delta.vercel.app` | feedbox-prod: Nik, 2026-11-16 4:58 PM. feedbox-preview: Nik, 2026-11-16 5:31 PM |
+| Redirect URLs | exactly two: `http://localhost:3000/**` and `https://triad-feedbox-*-nikolaj-ivancics-projects.vercel.app/**` (no leftover team-slug entry) | exactly one: `https://triad-feedbox-delta.vercel.app/**` | feedbox-prod: Nik, 2026-11-16 4:58 PM. feedbox-preview: Nik, 2026-11-16 5:31 PM |
 
 If a Preview address is missing from feedbox-preview's Redirect URLs, Supabase quietly links to the Site URL instead, and the sign-in link breaks.
 
-#### Written in Setup (F1, Part D); not checked since, so **to be checked**
-| Setting | Value (both projects) |
-|---|---|
-| Authentication, Sign In / Providers: Email | enabled; "Allow new users to sign up" on; **Confirm email** on (seen 2026-11-15: a first sign-in got the Confirm signup email) |
-| Email OTP Expiration | `900` seconds (the emails say "expires in 15 minutes") |
-| Authentication, Rate Limits: sending emails | `30` per hour |
-| Project creation | "Automatically expose new tables" on, "Enable automatic RLS" off (see "Three rules") |
+#### Sign In / Providers, Email, and Rate Limits
+| Setting | feedbox-preview | feedbox-prod | Checked |
+|---|---|---|---|
+| Sign In / Providers: Allow new users to sign up | on | on | feedbox-prod: Nik, 2026-11-16 5:31 PM. feedbox-preview: Nik, 2026-11-16 9:13 PM |
+| Sign In / Providers: **Confirm email** | on (a first sign-in gets the Confirm signup email) | on | feedbox-prod: Nik, 2026-11-16 5:31 PM. feedbox-preview: Nik, 2026-11-16 9:13 PM |
+| Email: Enable email provider | on | on | Nik, 2026-11-16 9:13 PM |
+| Email: Enable magic links and email OTP | on | on | Nik, 2026-11-16 9:13 PM |
+| Email: Email OTP length | 8 digits | 8 digits | Nik, 2026-11-16 9:13 PM |
+| Email: **Email OTP expiration** | `900` seconds | `900` seconds | Nik, 2026-11-16 9:28 PM, after a reload. **Corrected:** it was `3600` in both projects (seen 9:13 PM), not the `900` of Setup step D-9; Nik's decision F4f-D1 set both to `900`, to match "expires in 15 minutes" in both email templates and on the sign-in page |
+| Rate Limits: rate limit for sending emails | `30` per hour | `30` per hour | feedbox-prod: Nik, 2026-11-16 5:31 PM. feedbox-preview: Nik, 2026-11-16 9:13 PM |
+| Rate Limits: minimum interval per user | `60` seconds | not in the screenshot of 2026-11-16 | feedbox-preview: Nik, 2026-11-16 9:13 PM |
+
+#### Chosen at project creation (Setup, F1)
+| Setting | Value (both projects) | Checked |
+|---|---|---|
+| Automatically expose new tables | on | chosen at creation; not part of the check of 2026-11-16 |
+| Enable automatic RLS | off | chosen at creation; not part of the check of 2026-11-16 |
+
+Every migration is written for exactly these two choices (see "Three rules").
 
 ### Resend (sends the Supabase emails)
 | Setting | Value | Checked |
