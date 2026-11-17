@@ -8,7 +8,8 @@
 # one transaction. "Pasted twice" means the file's text twice in one query.
 #
 # It walks the database through the real states (Lumen preview, empty prod,
-# prod after the migration, prod with its board), runs every check where it
+# prod after the migration, prod with its board, prod with Nik as its owner),
+# runs every check where it
 # should PASS and where it should FAIL, and every changing script where it
 # should refuse, and confirms that a refusal changed nothing.
 # It resets the local database at the start and at the end.
@@ -59,7 +60,8 @@ digest() {
         (xpath('/table/row/n/text()', query_to_xml(
           'select (select count(*) from public.boards) + (select count(*) from public.ideas)
                 + (select count(*) from public.votes) + (select count(*) from public.comments)
-                + (select count(*) from public.profiles) as n', false, false, '')))[1]::text end, 'none'))"
+                + (select count(*) from public.profiles) + (select count(*) from public.board_owners) as n',
+          false, false, '')))[1]::text end, 'none'))"
 }
 
 # expect_refusal <label> <sql text> <phrase in the error message>
@@ -90,6 +92,19 @@ expect_success() {
 
 reset() { npx supabase db reset "$@" >/dev/null 2>&1 || { echo "db reset failed"; exit 1; }; }
 
+# person <name>: one signed-up person, the way Supabase Auth adds one (the
+# trigger on auth.users creates the profile, with no display name yet).
+person() {
+  printf '%s' "insert into auth.users (instance_id, id, aud, role, email, email_confirmed_at,
+    raw_app_meta_data, raw_user_meta_data, created_at, updated_at, confirmation_token, recovery_token,
+    email_change_token_new, email_change, email_change_token_current, reauthentication_token,
+    phone_change, phone_change_token)
+  values ('00000000-0000-0000-0000-000000000000', gen_random_uuid(), 'authenticated', 'authenticated',
+    '$1@feedbox.test', now(), '{}'::jsonb, '{}'::jsonb, now(), now(),
+    '', '', '', '', '', '', '', '')"
+}
+OWNER=supabase/production/owner-nik.sql
+
 echo "== A. Local database with the Lumen seed (marker: local)"
 reset
 expect_check preview-seed FAIL
@@ -109,6 +124,8 @@ expect_refusal "marker feedbox-preview again" "$(cat supabase/marker/feedbox-pre
 expect_refusal "marker feedbox-prod in preview" "$(cat supabase/marker/feedbox-prod.sql)" "already marked as feedbox-preview"
 expect_refusal "board script in preview" "$(cat supabase/production/board-feedbox.sql)" "marked feedbox-preview"
 expect_refusal "undo in preview" "$(cat supabase/production/undo-feedbox-v1.sql)" "has rows"
+expect_check prod-owner FAIL
+expect_refusal "owner script in preview" "$(cat $OWNER)" "marked feedbox-preview"
 
 echo "== B. An empty project, like feedbox-prod tonight (migration undone, no marker)"
 reset --no-seed
@@ -157,6 +174,30 @@ expect_check prod-ready-for-board FAIL
 expect_check prod-after-migration FAIL
 expect_refusal "board script again" "$(cat supabase/production/board-feedbox.sql)" "already has a board"
 expect_refusal "undo with the board" "$(cat supabase/production/undo-feedbox-v1.sql)" "has rows"
+
+echo "== F. feedbox-prod with its board: Nik signs in, then becomes its owner (O1)"
+expect_check prod-owner FAIL
+expect_refusal "owner script with no person" "$(cat $OWNER)" "no person yet"
+expect_success "Nik signs in for the first time (test person, no display name yet)" "$(person o1-nik)"
+expect_refusal "owner script before the display name is set" "$(cat $OWNER)" "(none yet)"
+expect_success "Nik sets his display name" "update public.profiles set display_name = 'Nikolaj Ivancic'"
+expect_check prod-owner FAIL
+expect_refusal "owner script, project marked feedbox-preview" "update triad.project set name = 'feedbox-preview'; $(cat $OWNER)" "marked feedbox-preview"
+expect_refusal "owner script, migration changed" "grant insert on public.ideas to anon; $(cat $OWNER)" "does not match the reviewed Feedbox v1 migration"
+expect_refusal "owner script, no board" "delete from public.boards; $(cat $OWNER)" "no board"
+expect_refusal "owner script, two people" "$(person o1-other); $(cat $OWNER)" "has 2 people"
+expect_refusal "owner script, another display name" "update public.profiles set display_name = 'Someone Else'; $(cat $OWNER)" "Someone Else"
+expect_refusal "owner script pasted twice" "$(twice $OWNER)" "pasted twice into one query. Nothing was changed: the whole query is undone"
+expect_check prod-owner FAIL
+expect_success "owner script" "$(cat $OWNER)"
+expect_check prod-owner PASS
+expect_check prod-owner FAIL "update public.profiles set display_name = 'Someone Else'"
+expect_check prod-owner FAIL "$(person o1-other); insert into public.board_owners (board_id, user_id) select b.id, u.id from public.boards b, auth.users u where u.email = 'o1-other@feedbox.test'"
+expect_check prod-owner FAIL "delete from public.board_owners"
+expect_check prod-owner FAIL "update triad.project set name = 'feedbox-preview'"
+expect_check prod-owner FAIL "grant insert on public.ideas to anon"
+expect_check prod-board PASS
+expect_refusal "owner script again" "$(cat $OWNER)" "already an owner"
 
 echo "== E. Back to the normal local database"
 reset
