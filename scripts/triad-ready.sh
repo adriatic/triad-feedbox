@@ -36,7 +36,7 @@
 #   TRIAD_GH               GitHub CLI program (default ~/gh-cli)
 #   TRIAD_MAIN_BRANCH      main branch (default main)
 #   TRIAD_REPORTS_BRANCH   reports branch (default cc-reports)
-#   TRIAD_REQUIRED_CHECKS  required checks on main (default "lint typecheck unit db Vercel")
+#   TRIAD_REQUIRED_CHECKS  required checks on main (default "lint typecheck unit db e2e Vercel")
 #   TRIAD_PROD_URL         Production address (default https://triad-feedbox-delta.vercel.app)
 #   TRIAD_PREVIEW_REF      feedbox-preview project ID (default qrbeiveyomidfafivuta)
 #   TRIAD_PREVIEW_URL      address asked for feedbox-preview
@@ -61,7 +61,7 @@ DOCKER_CMD="${TRIAD_DOCKER_CMD:-docker}"
 GH="${TRIAD_GH:-$HOME_DIR/gh-cli}"
 MAIN_BRANCH="${TRIAD_MAIN_BRANCH:-main}"
 REPORTS_BRANCH="${TRIAD_REPORTS_BRANCH:-cc-reports}"
-REQUIRED_CHECKS="${TRIAD_REQUIRED_CHECKS:-lint typecheck unit db Vercel}"
+REQUIRED_CHECKS="${TRIAD_REQUIRED_CHECKS:-lint typecheck unit db e2e Vercel}"
 PROD_URL="${TRIAD_PROD_URL:-https://triad-feedbox-delta.vercel.app}"
 PREVIEW_REF="${TRIAD_PREVIEW_REF:-qrbeiveyomidfafivuta}"
 PROD_REF="${TRIAD_PROD_REF:-imlitxtkpvrcmijgdsrw}"
@@ -249,7 +249,7 @@ else
   fail "Reports branch" "branch $REPORTS_BRANCH was not found on GitHub, so Claude.ai cannot read the reports there. Tell Claude Code."
 fi
 
-# --- 14. Required checks on main (extra: from CLAUDE.md, the ruleset since M3) -----------------------
+# --- 14. Required checks on main (extra: from CLAUDE.md, the ruleset since M5) -----------------------
 if [ "$GH_OK" != 1 ]; then
   fail "Required checks" "$NEED_GH"
 elif gh_read api "repos/$REPO/rules/branches/$MAIN_BRANCH" \

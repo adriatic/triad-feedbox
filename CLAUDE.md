@@ -24,10 +24,10 @@ Feedbox is the worked example for an article about TRIAD (Tracker-Recorded, Inde
 
 ## Branches, pull requests and merging
 1. Each task works on its own branch from `main`, named `f<n>-<topic>` (for example `f2-core`), and opens exactly ONE pull request into `main`.
-2. Never push to `main` directly. The ruleset on `main` restricts deletions, blocks force pushes, requires a pull request (0 approvals) and requires the status checks `lint`, `typecheck`, `unit` and `Vercel` (since M2; `db` is added in M3).
+2. Never push to `main` directly. The ruleset on `main` restricts deletions, blocks force pushes, requires a pull request (0 approvals) and requires six status checks: `lint`, `typecheck`, `unit`, `db`, `e2e` and `Vercel` (`lint`, `typecheck`, `unit` and `Vercel` since M2, `db` since M3, `e2e` since M5).
 3. **Never merge** in a build task. Merging is a separate merge task (M2, M3, …), given only after Nik says "merge" in his chat with Claude.ai. Nik's word, with its time, is recorded in the TRIAD tracker, and the merge task message quotes it.
 4. A merge task: check that the branch head is the approved commit, confirm the pull request's checks are green, squash-merge with gh (`--match-head-commit`), delete the branch, confirm that the Production deployment of `main` succeeds, tag the merge commit `f<n>`, and report.
-5. CI checks (GitHub Actions workflow `CI`): `lint`, `typecheck`, `unit`, `db` (pgTAP tests and `npm run test:checks` on a local Supabase database in Docker on the runner), `e2e` (since F4: Playwright against the app built on the runner and LOCAL Supabase in Docker; not yet a required check unless Nik decides so).
+5. CI checks (GitHub Actions workflow `CI`): `lint`, `typecheck`, `unit`, `db` (pgTAP tests and `npm run test:checks` on a local Supabase database in Docker on the runner), `e2e` (since F4: Playwright against the app built on the runner and LOCAL Supabase in Docker; a required check since M5). All five, plus Vercel's own status `Vercel`, are required on `main`.
 
 ## Three rules that are never broken
 1. **You never hold a Supabase secret key**: not in a file on the Mac, not in your shell, not in a commit. The preview secret key exists only as the GitHub Actions secret `SUPABASE_PREVIEW_SECRET_KEY`, used only by CI.
@@ -148,7 +148,19 @@ If a Preview address is missing from feedbox-preview's Redirect URLs, Supabase q
 | Email: Email OTP length | 8 digits | 8 digits | Nik, 2026-11-16 9:13 PM |
 | Email: **Email OTP expiration** | `900` seconds | `900` seconds | Nik, 2026-11-16 9:28 PM, after a reload. **Corrected:** it was `3600` in both projects (seen 9:13 PM), not the `900` of Setup step D-9; Nik's decision F4f-D1 set both to `900`, to match "expires in 15 minutes" in both email templates and on the sign-in page |
 | Rate Limits: rate limit for sending emails | `30` per hour | `30` per hour | feedbox-prod: Nik, 2026-11-16 5:31 PM. feedbox-preview: Nik, 2026-11-16 9:13 PM |
-| Rate Limits: minimum interval per user | `60` seconds | not in the screenshot of 2026-11-16 | feedbox-preview: Nik, 2026-11-16 9:13 PM |
+| Rate Limits: minimum interval per user | `60` seconds | `60` seconds | feedbox-preview: Nik, 2026-11-16 9:13 PM. feedbox-prod: Nik, 2026-11-17 8:47 AM (screenshot of the Rate Limits page, opened from feedbox-prod's address; the page itself does not show the project name) |
+
+#### Local Supabase (`supabase/config.toml`) against these settings
+The local stack mirrors the hosted sign-in settings, except where a difference is on purpose:
+
+| Setting | Local | Hosted (both projects) | Why |
+|---|---|---|---|
+| Email templates and subjects, Confirm email, OTP expiration 900, OTP length 8 | the same | the same | mirrored (OTP length since C1) |
+| Sender | `Feedbox <feedbox@pactresearch.net>` (`[local_smtp]`) | `Feedbox <feedbox@pactresearch.net>` | mirrored since C1; locally Mailpit catches every email, nothing is sent |
+| Sending | Mailpit | custom SMTP through Resend | **different on purpose**: no email leaves the Mac or the CI runner |
+| Rate limit for sending emails | `60` per hour | `30` per hour | **different on purpose**: repeated e2e runs send many emails |
+| Minimum interval per user (`max_frequency`) | `1s` | `60` seconds | **different on purpose**: the e2e tests send two sign-in emails to one address within seconds |
+| Redirect URLs | `http://localhost:3000/**`, `http://127.0.0.1:3000/**` | see URL Configuration | **different on purpose**: Playwright uses 127.0.0.1 |
 
 #### Chosen at project creation (Setup, F1)
 | Setting | Value (both projects) | Checked |
@@ -173,7 +185,7 @@ One key per project, so either can be revoked without touching the other.
     /Users/nikolajivancic/Work/triad-feedbox/scripts/triad-ready.sh
 
 - It prints `PASS` or `FAIL`, the check's name and what it found; every `FAIL` says what to do. The last line is `READY: all N checks passed.` or `NOT READY: K of N checks failed.` (exit code 0 or 1).
-- The 19 checks, in order: macOS version (information); Claude desktop app running; Chrome running; Claude Code installed; Node.js matches `.nvmrc`; the project folder is a clone of `adriatic/triad-feedbox` (and its branch); the git working tree (information); the reports folder exists, can be written to and holds `feedbox-inputs`; the Obsidian vault and its TRIAD folder; Docker running; the stored GitHub sign-in can read the repository; git reaches GitHub over SSH; the `cc-reports` branch exists; `main` requires `lint`, `typecheck`, `unit`, `db` and `Vercel`; the latest CI run on `main` passed; Vercel Production answers; Vercel's status on `main`'s latest commit is success; Supabase feedbox-preview answers; Supabase feedbox-prod answers (both asked with no key; project IDs from the Obsidian note `TRIAD/Important URLs.md`).
+- The 19 checks, in order: macOS version (information); Claude desktop app running; Chrome running; Claude Code installed; Node.js matches `.nvmrc`; the project folder is a clone of `adriatic/triad-feedbox` (and its branch); the git working tree (information); the reports folder exists, can be written to and holds `feedbox-inputs`; the Obsidian vault and its TRIAD folder; Docker running; the stored GitHub sign-in can read the repository; git reaches GitHub over SSH; the `cc-reports` branch exists; `main` requires the six checks `lint`, `typecheck`, `unit`, `db`, `e2e` and `Vercel`; the latest CI run on `main` passed; Vercel Production answers; Vercel's status on `main`'s latest commit is success; Supabase feedbox-preview answers; Supabase feedbox-prod answers (both asked with no key; project IDs from the Obsidian note `TRIAD/Important URLs.md`).
 - It only reads: it changes, installs, starts, stops and signs in to nothing, sends no key, and every network check has a time limit. The `TRIAD_*` variables in its header point checks at wrong places, for testing only. `tests/triad-ready.test.ts` keeps those rules in `unit`.
 - When you add a piece to TRIAD, add its check here, in README.md and in the script, and update the count of checks in all three places and in `tests/triad-ready.test.ts`.
 

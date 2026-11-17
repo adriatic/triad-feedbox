@@ -122,7 +122,12 @@ async function linkFromForm(page: Page, baseURL: string, email: string, subject:
       return message?.Subject;
     }, { timeout: 15_000 })
     .toBe(subject);
-  const full = (await (await fetch(`${sb.mailpitUrl}/api/v1/message/${message!.ID}`)).json()) as { HTML: string };
+  const full = (await (await fetch(`${sb.mailpitUrl}/api/v1/message/${message!.ID}`)).json()) as {
+    HTML: string;
+    From: { Name: string; Address: string };
+  };
+  // The sender, as on the hosted projects: Feedbox <feedbox@pactresearch.net> (supabase/config.toml, task C1).
+  expect(full.From).toEqual({ Name: "Feedbox", Address: "feedbox@pactresearch.net" });
   const href = /href="([^"]+)"/.exec(full.HTML)?.[1]?.replaceAll("&amp;", "&");
   // The same form for a first and a later sign-in: <site>/auth/confirm?next=…&token_hash=…&type=email
   expect(href).toMatch(
