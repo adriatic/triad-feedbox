@@ -3,7 +3,8 @@ import { localSupabase } from "./e2e/local-supabase";
 
 // End-to-end tests (F1 section 10). F4: against the app built and started
 // locally, with LOCAL Supabase in Docker (npm run e2e:supabase), never a
-// hosted project. The Preview runner arrives in F5.
+// hosted project. A runner against the hosted Preview is not built (F5
+// report, decision F5-D2).
 const PORT = 3000;
 const baseURL = `http://127.0.0.1:${PORT}`;
 const supabase = localSupabase();

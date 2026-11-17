@@ -1,35 +1,56 @@
 import Link from "next/link";
 import { formatDate, formatVotes, publishedChangelog } from "@/lib/feedbox";
+import { StatusChip } from "@/components/StatusChip";
 import { getBoard, getChangelog, getIdeas } from "@/lib/supabase/data";
 
-// The changelog (F4: bare page with real data; styled to Changelog.dc.html in F5).
+// The changelog, read only (Changelog.dc.html). Writing it is the owner's editor in F6.
 export default async function ChangelogPage() {
   const board = await getBoard();
-  if (!board) return <h1>Board not found</h1>;
+  if (!board) {
+    return (
+      <main className="page">
+        <h1 className="page-title">Board not found</h1>
+      </main>
+    );
+  }
   const [{ entries, items }, ideas] = await Promise.all([getChangelog(board.id), getIdeas(board.id)]);
   const releases = publishedChangelog(entries, items, ideas);
   return (
-    <>
-      <h1>Changelog</h1>
-      <p>What shipped on {board.name}, newest first.</p>
+    <main className="page" style={{ gap: 28 }}>
+      <div>
+        <h1 className="page-title">What shipped in {board.name}</h1>
+        <p className="muted" style={{ margin: "6px 0 0" }}>
+          Every entry started as an idea on the board. Newest first.
+        </p>
+      </div>
       {releases.length === 0 ? (
-        <p>Nothing has been published yet.</p>
+        <p className="empty">Nothing has been published yet.</p>
       ) : (
         releases.map((r) => (
-          <section key={r.id} data-testid="release">
-            <h2>
-              {r.title} ({formatDate(r.releasedOn)})
-            </h2>
-            <ul>
+          <section key={r.id} aria-label={r.title} className="release" data-testid="release">
+            <div className="release-date">
+              <strong>{formatDate(r.releasedOn)}</strong>
+              <span className="muted" style={{ fontSize: 13 }}>
+                {r.title}
+              </span>
+            </div>
+            <div className="release-lines">
               {r.lines.map((l) => (
-                <li key={l.ideaId}>
-                  {l.note} (<Link href={`/ideas/${l.ideaId}`}>{l.ideaTitle}</Link>, {formatVotes(l.voteCount)})
-                </li>
+                <div key={l.ideaId} className="card release-line">
+                  <div className="idea-title-line">
+                    <span className="idea-title">{l.ideaTitle}</span>
+                    <StatusChip status="shipped" />
+                  </div>
+                  <p>{l.note}</p>
+                  <Link href={`/ideas/${l.ideaId}`} className="release-link">
+                    See the idea, {formatVotes(l.voteCount)}
+                  </Link>
+                </div>
               ))}
-            </ul>
+            </div>
           </section>
         ))
       )}
-    </>
+    </main>
   );
 }

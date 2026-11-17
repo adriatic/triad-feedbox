@@ -1,37 +1,41 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
+import { Inter } from "next/font/google";
+import Link from "next/link";
 import { Suspense, type ReactNode } from "react";
 import { Header } from "@/components/Header";
 import { getBoard, getViewer } from "@/lib/supabase/data";
+import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Feedbox",
   description: "A free, open-source feedback and roadmap board.",
 };
 
-const baseStyles = `
-:root { color-scheme: light dark; --bg: #F6F7F9; --card: #FFFFFF; --ink: #16181D; --muted: #5B6270; --line: #E3E5EA; --accent: #4338CA; }
-@media (prefers-color-scheme: dark) {
-  :root { --bg: #0F1115; --card: #171A21; --ink: #ECEEF3; --muted: #A3ABBA; --line: #2A2F3A; --accent: #8B93FF; }
-}
-* { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--ink); font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.5; }
-`;
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#171a21" },
+  ],
+};
+
+// Inter, as in the designs. next/font serves it from this site (no request to Google from the browser).
+const inter = Inter({ subsets: ["latin"], weight: ["400", "500", "600", "700"], variable: "--font-inter", display: "swap" });
 
 export default async function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   const board = await getBoard();
   const viewer = await getViewer(board?.id ?? null);
   return (
-    <html lang="en">
-      <head>
-        <style>{baseStyles}</style>
-      </head>
+    <html lang="en" className={inter.variable}>
       <body>
-        <div style={{ maxWidth: 720, margin: "0 auto", padding: "16px" }}>
-          <Suspense>
-            <Header board={board} viewer={viewer} />
-          </Suspense>
-          <main>{children}</main>
-        </div>
+        <Suspense>
+          <Header board={board} viewer={viewer} />
+        </Suspense>
+        {children}
+        <footer className="site-footer">
+          {board?.name ?? "Feedbox"} runs on Feedbox, a free, open-source feedback board. <Link href="/changelog">See what shipped</Link>
+        </footer>
       </body>
     </html>
   );

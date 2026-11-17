@@ -40,7 +40,7 @@ async function signInLink(email: string, baseURL: string, next = "/"): Promise<s
 test("visitor, first sign-in with a name, member, owner, sign-out", async ({ page, baseURL }) => {
   // 1. Visitor.
   await page.goto("/");
-  await expect(page.getByRole("heading", { level: 1, name: "Lumen" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "What should Lumen do next?" })).toBeVisible();
   await expect(viewerState(page)).toHaveText("Viewing as visitor");
   await expect(page.getByTestId("idea-list").getByRole("listitem").first()).toBeVisible();
 
@@ -196,15 +196,15 @@ test("a person who exists but never confirmed gets the Confirm signup email agai
 
 test("every route reads the board as a visitor", async ({ page }) => {
   await page.goto("/?tab=shipped&sort=new");
-  await expect(page.getByText(/^Shipped \(\d+\)$/)).toBeVisible();
-  const first = page.getByTestId("idea-list").getByRole("link").first();
+  await expect(page.getByRole("link", { name: /^Shipped \d+$/ })).toHaveAttribute("aria-current", "page");
+  const first = page.getByTestId("idea-list").locator(".idea-title").first();
   const title = await first.textContent();
   await first.click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(title!);
   await expect(page.getByText(/^Posted by /)).toBeVisible();
 
   await page.goto("/changelog");
-  await expect(page.getByRole("heading", { level: 1, name: "Changelog" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "What shipped in Lumen" })).toBeVisible();
   await expect(page.getByTestId("release").first()).toBeVisible();
 
   await page.goto("/ideas/new");

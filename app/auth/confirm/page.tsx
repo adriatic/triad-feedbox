@@ -14,16 +14,23 @@ export default async function ConfirmPage({
 }) {
   const { token_hash, type, next } = await searchParams;
   const safeNext = safeNextPath(next);
-  if (!token_hash || !type) {
-    return (
-      <>
-        <h1>Finish signing in</h1>
-        <p role="alert">This sign-in link is incomplete. Ask for a new one.</p>
-        <p>
-          <Link href={`/sign-in?next=${encodeURIComponent(safeNext)}`}>Ask for a new link</Link>
-        </p>
-      </>
-    );
-  }
-  return <ConfirmForm tokenHash={token_hash} type={type} next={safeNext} />;
+  return (
+    <main className="auth-page">
+      <div className="card auth-card">
+        {!token_hash || !type ? (
+          <>
+            <h1>Finish signing in</h1>
+            <p className="alert" role="alert">
+              This sign-in link is incomplete. Ask for a new one.
+            </p>
+            <Link href={`/sign-in?next=${encodeURIComponent(safeNext)}`} className="btn">
+              Ask for a new link
+            </Link>
+          </>
+        ) : (
+          <ConfirmForm tokenHash={token_hash} type={type} next={safeNext} />
+        )}
+      </div>
+    </main>
+  );
 }

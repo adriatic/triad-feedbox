@@ -10,22 +10,22 @@ export function ConfirmForm({ tokenHash, type, next }: { tokenHash: string; type
       <h1>Finish signing in</h1>
       {state.status === "error" ? (
         <>
-          <p role="alert">{state.message}</p>
-          <p>
-            <Link href={`/sign-in?next=${encodeURIComponent(next)}`}>Ask for a new link</Link>
+          <p className="alert" role="alert">
+            {state.message}
           </p>
+          <Link href={`/sign-in?next=${encodeURIComponent(next)}`} className="btn">
+            Ask for a new link
+          </Link>
         </>
       ) : (
         <form action={action}>
           <input type="hidden" name="token_hash" value={tokenHash} />
           <input type="hidden" name="type" value={type} />
           <input type="hidden" name="next" value={next} />
-          <p>Press the button to finish signing in on this device.</p>
-          <p>
-            <button type="submit" disabled={pending}>
-              Finish signing in
-            </button>
-          </p>
+          <p className="muted">Press the button to finish signing in on this device.</p>
+          <button type="submit" className="btn btn-primary" disabled={pending}>
+            Finish signing in
+          </button>
         </form>
       )}
     </>
