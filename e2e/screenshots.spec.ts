@@ -11,7 +11,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
-import { ideaId, people, signIn, signInLink } from "./helpers";
+import { ideaId, people, signIn, signInLink, viewerState } from "./helpers";
 
 test.skip(!process.env.F5_SCREENSHOTS, "Screenshots are made only by `npm run screenshots`.");
 test.setTimeout(600_000);
@@ -30,34 +30,40 @@ interface State {
   as: As;
   /** Opens the page and brings it into the state. */
   open: (page: Page, baseURL: string, tag: string) => Promise<void>;
+  /** The address (path and query) the capture must be on. */
+  at: RegExp;
+  /** The header's sign-in state the capture must show (default: the person's, from HEADER). */
+  header?: string;
 }
+
+const HEADER: Record<As, string> = { visitor: "Viewing as visitor", sam: "Signed in as Sam P.", ana: "Signed in as owner" };
 
 const dark = async () => `/ideas/${await ideaId("Dark mode for the editor")}`;
 
 const STATES: State[] = [
-  { name: "board-visitor", as: "visitor", open: (p) => go(p, "/") },
-  { name: "board-planned-visitor", as: "visitor", open: (p) => go(p, "/?tab=planned") },
-  { name: "board-sort-new-visitor", as: "visitor", open: (p) => go(p, "/?sort=new") },
-  { name: "board-search-visitor", as: "visitor", open: (p) => go(p, "/?q=laptop") },
-  { name: "board-signed-in", as: "sam", open: (p) => go(p, "/") },
-  { name: "board-owner", as: "ana", open: (p) => go(p, "/?tab=planned") },
-  { name: "idea-visitor", as: "visitor", open: async (p) => go(p, await dark()) },
-  { name: "idea-signed-in", as: "sam", open: async (p) => go(p, await dark()) },
-  { name: "idea-owner", as: "ana", open: async (p) => go(p, await dark()) },
-  { name: "post-idea-empty", as: "sam", open: (p) => go(p, "/ideas/new") },
+  { name: "board-visitor", as: "visitor", at: /^\/$/, open: (p) => go(p, "/") },
+  { name: "board-planned-visitor", as: "visitor", at: /^\/\?tab=planned$/, open: (p) => go(p, "/?tab=planned") },
+  { name: "board-sort-new-visitor", as: "visitor", at: /^\/\?sort=new$/, open: (p) => go(p, "/?sort=new") },
+  { name: "board-search-visitor", as: "visitor", at: /^\/\?q=laptop$/, open: (p) => go(p, "/?q=laptop") },
+  { name: "board-signed-in", as: "sam", at: /^\/$/, open: (p) => go(p, "/") },
+  { name: "board-owner", as: "ana", at: /^\/\?tab=planned$/, open: (p) => go(p, "/?tab=planned") },
+  { name: "idea-visitor", as: "visitor", at: /^\/ideas\/\d+$/, open: async (p) => go(p, await dark()) },
+  { name: "idea-signed-in", as: "sam", at: /^\/ideas\/\d+$/, open: async (p) => go(p, await dark()) },
+  { name: "idea-owner", as: "ana", at: /^\/ideas\/\d+$/, open: async (p) => go(p, await dark()) },
+  { name: "post-idea-empty", as: "sam", at: /^\/ideas\/new$/, open: (p) => go(p, "/ideas/new") },
   {
     name: "post-idea-similar",
-    as: "sam",
+    as: "sam", at: /^\/ideas\/new$/,
     open: async (p) => {
       await go(p, "/ideas/new");
       await p.getByLabel("Title").fill("Sync notes");
       await expect(p.getByTestId("similar-idea").first()).toBeVisible();
     },
   },
-  { name: "sign-in", as: "visitor", open: (p) => go(p, "/sign-in") },
+  { name: "sign-in", as: "visitor", at: /^\/sign-in$/, open: (p) => go(p, "/sign-in") },
   {
     name: "sign-in-check-email",
-    as: "visitor",
+    as: "visitor", at: /^\/sign-in$/,
     open: async (p, _b, tag) => {
       await go(p, "/sign-in");
       await p.getByLabel("Email address").fill(who.email(`check-${tag}`));
@@ -67,7 +73,7 @@ const STATES: State[] = [
   },
   {
     name: "confirm",
-    as: "visitor",
+    as: "visitor", at: /^\/auth\/confirm\?/,
     open: async (p, baseURL, tag) => {
       const { href } = await signInLink(who.email(`confirm-${tag}`), baseURL, "/");
       await go(p, href);
@@ -75,7 +81,7 @@ const STATES: State[] = [
   },
   {
     name: "welcome",
-    as: "visitor",
+    as: "visitor", at: /^\/welcome\?next=/, header: "Signed in",
     open: async (p, baseURL, tag) => {
       const { href } = await signInLink(who.email(`welcome-${tag}`), baseURL, "/");
       await go(p, href);
@@ -83,7 +89,7 @@ const STATES: State[] = [
       await expect(p.getByRole("heading", { name: /^Welcome to / })).toBeVisible();
     },
   },
-  { name: "changelog", as: "visitor", open: (p) => go(p, "/changelog") },
+  { name: "changelog", as: "visitor", at: /^\/changelog$/, open: (p) => go(p, "/changelog") },
 ];
 
 /** The six designs and the built screen in the same state (light, the design's own width). */
@@ -120,17 +126,22 @@ test("screenshots of every screen and state, and the side-by-side images", async
 
   for (const scheme of ["light", "dark"] as const) {
     for (const width of [1280, 390] as const) {
-      const contexts = new Map<As, BrowserContext>();
       for (const state of STATES) {
-        if (!contexts.has(state.as)) contexts.set(state.as, await contextFor(browser, baseURL!, state.as, scheme, width));
-        const page = await contexts.get(state.as)!.newPage();
+        // A fresh browser for every capture (task F5a): no session is carried
+        // over from an earlier capture. Before F5a, "welcome" left a person
+        // without a name signed in, and "changelog" then showed /welcome.
+        const context = await contextFor(browser, baseURL!, state.as, scheme, width);
+        const page = await context.newPage();
         await state.open(page, baseURL!, `${scheme}-${width}`);
+        // The capture must be the screen and state its file name says.
+        const url = new URL(page.url());
+        expect(url.pathname + url.search, `${state.name}: address`).toMatch(state.at);
+        await expect(viewerState(page), `${state.name}: header`).toHaveText(state.header ?? HEADER[state.as]);
         const file = path.join(OUT, `${state.name}-${scheme}-${width}.png`);
         const png = await page.screenshot({ path: file, fullPage: true, animations: "disabled", caret: "hide" });
         built.set(`${state.name}-${scheme}-${width}`, png);
-        await page.close();
+        await context.close();
       }
-      for (const c of contexts.values()) await c.close();
     }
   }
 
