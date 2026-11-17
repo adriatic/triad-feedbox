@@ -38,6 +38,8 @@ Four settings, each of type Config, set once for Preview and once for Production
 
 `NEXT_PUBLIC_` values are built into the code, so a deployment sees a changed setting only after it is built again: push a new commit, or use Redeploy in Vercel.
 
+Every other setting that lives only in a dashboard (Vercel, Supabase and Resend: email templates, the email sender, sign-in URLs) is recorded, with who checked it and when, in the section "Dashboard settings" of [CLAUDE.md](CLAUDE.md). Secret values (the Resend keys) are never written down; they live only in the dashboards.
+
 The two sign-in emails ("Confirm signup" for a person's first sign-in, "Magic Link" for every later one) are in [`supabase/templates/`](supabase/templates/); each Supabase project's dashboard must hold the same text.
 
 ## Is TRIAD ready?

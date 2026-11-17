@@ -90,19 +90,70 @@ Every query Nik runs is written, tested and reviewed like any other code. Nik ne
 - `supabase/config.toml` sets the same for local Supabase (`enable_confirmations = true`, both templates); `tests/email-templates.test.ts` keeps the files and the config in line.
 - In a freshly started local stack, the auth service sends Supabase's default emails for a few seconds (it loads the template files before the gateway that serves them is up). `e2e/global-setup.ts` waits until both Feedbox templates are in use before the end-to-end tests start.
 
-## App settings on Vercel
-The app reads four settings. In Vercel: project `triad-feedbox`, Settings, Environment Variables. Each is type **Config** (not secret: the two `NEXT_PUBLIC_` values are built into the code the browser gets) and is set once per environment.
+## Dashboard settings
+**Rule (Nik, 2026-11-15 9:04 PM): dashboard settings are code too, and are checked.** Every setting that lives only in a dashboard (Vercel, Supabase, Resend) is written here, as the source of truth, with who checked it and when. When a task needs a dashboard change, the task changes this section in the same pull request and gives Nik the step; after Nik's check, the "Checked" column is updated.
 
-| Setting | Preview | Production | Where the value comes from |
-|---|---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | feedbox-preview's Project URL | feedbox-prod's Project URL | Supabase dashboard, the project, Connect (or Project Settings, Data API): `https://<project ID>.supabase.co` |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | feedbox-preview's publishable key | feedbox-prod's publishable key | Supabase dashboard, the project, Project Settings, API Keys: the key starting `sb_publishable_` (never a secret key) |
-| `FEEDBOX_BOARD_SLUG` | `lumen` | `feedbox` | The board's slug: `lumen` from `supabase/seed.sql`, `feedbox` from `supabase/production/board-feedbox.sql` |
-| `NEXT_PUBLIC_SITE_URL` | not set (a Preview links back to its own address) | `https://triad-feedbox-delta.vercel.app` | The Production address; it must match feedbox-prod's Site URL and Redirect URLs |
+**Secrets never appear here.** A row marked **SECRET** names the value and where it lives; the value itself exists only in that dashboard. Never write, ask for or copy it.
+
+### Vercel (project `triad-feedbox`, team `nikolaj-ivancics-projects`)
+#### App settings on Vercel
+Settings, Environment Variables. Each is type **Config** (not secret: the two `NEXT_PUBLIC_` values are built into the code the browser gets) and is set once per environment.
+
+| Setting | Preview | Production | Where the value comes from | Checked |
+|---|---|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | feedbox-preview's Project URL | feedbox-prod's Project URL | Supabase dashboard, the project, Connect (or Project Settings, Data API): `https://<project ID>.supabase.co` | Nik, added 2026-11-15 6:39 PM |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | feedbox-preview's publishable key | feedbox-prod's publishable key | Supabase dashboard, the project, Project Settings, API Keys: the key starting `sb_publishable_` (never a secret key) | Nik, added 2026-11-15 6:39 PM |
+| `FEEDBOX_BOARD_SLUG` | `lumen` | `feedbox` | The board's slug: `lumen` from `supabase/seed.sql`, `feedbox` from `supabase/production/board-feedbox.sql` | Nik, added 2026-11-15 6:39 PM |
+| `NEXT_PUBLIC_SITE_URL` | not set (a Preview links back to its own address) | `https://triad-feedbox-delta.vercel.app` | The Production address; it must match feedbox-prod's Site URL and Redirect URLs | Nik, 2026-11-15/16 |
 
 - **A changed setting reaches a deployment only when it is built again.** `NEXT_PUBLIC_` values are copied into the code at build time. After adding or changing a setting, push a new commit to the branch (Vercel builds a new Preview), or in Vercel open Deployments, the deployment's ⋯ menu, **Redeploy**.
 - All settings are read through `lib/supabase/env.ts` (`NEXT_PUBLIC_SITE_URL` through `lib/supabase/site.ts`, where it is optional). A missing one fails with `Missing environment variable <NAME>. ...`, never with Supabase's "URL and Key are required"; `lib/supabase/env.test.ts` keeps this in `unit`.
 - Locally and in CI the values come from `npx supabase status` (the local stack), never from a hosted project.
+
+| Other Vercel setting | Value | Checked |
+|---|---|---|
+| Deployment Protection, Vercel Authentication | Standard Protection (Previews need a Vercel sign-in; Production is public) | set in Setup (F1, step C6); seen working 2026-11-15 (a Preview answers 302 to Vercel's sign-in) |
+
+### Supabase (organisation TRIAD)
+#### Sign-in by email (both projects)
+| Setting | feedbox-preview | feedbox-prod | Checked |
+|---|---|---|---|
+| Authentication, Emails, Templates, **Magic Link** | subject `Your Feedbox sign-in link`, body = `supabase/templates/magic_link.html` | the same | Nik, 2026-11-15/16 (feedbox-preview also at 2026-11-15 7:16 PM) |
+| Authentication, Emails, Templates, **Confirm signup** | subject `Your first Feedbox sign-in link`, body = `supabase/templates/confirmation.html` | the same | Nik, 2026-11-15/16 |
+| Authentication, Emails, SMTP Settings, **Enable Custom SMTP** | on | on | Nik, 2026-11-15/16 (decision F4-D3) |
+| Sender email | `feedbox@pactresearch.net` | `feedbox@pactresearch.net` | Nik, 2026-11-15/16 |
+| Sender name | `Feedbox` | `Feedbox` | Nik, 2026-11-15/16 |
+| Host | `smtp.resend.com` | `smtp.resend.com` | Nik, 2026-11-15/16 |
+| Port | `465` | `465` | Nik, 2026-11-15/16 |
+| Username | `resend` | `resend` | Nik, 2026-11-15/16 |
+| Password | **SECRET**: the Resend API key named `feedbox-preview` | **SECRET**: the Resend API key named `feedbox-prod` | lives only in Supabase and Resend |
+
+The template files are the source; `tests/email-templates.test.ts` checks them and `supabase/config.toml` uses them locally (see "Sign-in emails"). A change to a template file is a step for Nik in both projects.
+
+#### URL Configuration (Authentication, URL Configuration)
+| Setting | feedbox-preview | feedbox-prod | Checked |
+|---|---|---|---|
+| Site URL | `http://localhost:3000` | `https://triad-feedbox-delta.vercel.app` | feedbox-prod: Nik, 2026-11-16 4:58 PM. feedbox-preview: set in Setup Part 2; **to be checked** |
+| Redirect URLs | `http://localhost:3000/**` and `https://triad-feedbox-*-nikolaj-ivancics-projects.vercel.app/**` | exactly one: `https://triad-feedbox-delta.vercel.app/**` | feedbox-prod: Nik, 2026-11-16 4:58 PM. feedbox-preview: set in Setup Part 2; **to be checked**, including whether a leftover entry with a team-slug placeholder (`…-<Vercel team slug>.vercel.app/**`) is still listed |
+
+If a Preview address is missing from feedbox-preview's Redirect URLs, Supabase quietly links to the Site URL instead, and the sign-in link breaks.
+
+#### Written in Setup (F1, Part D); not checked since, so **to be checked**
+| Setting | Value (both projects) |
+|---|---|
+| Authentication, Sign In / Providers: Email | enabled; "Allow new users to sign up" on; **Confirm email** on (seen 2026-11-15: a first sign-in got the Confirm signup email) |
+| Email OTP Expiration | `900` seconds (the emails say "expires in 15 minutes") |
+| Authentication, Rate Limits: sending emails | `30` per hour |
+| Project creation | "Automatically expose new tables" on, "Enable automatic RLS" off (see "Three rules") |
+
+### Resend (sends the Supabase emails)
+| Setting | Value | Checked |
+|---|---|---|
+| Sending domain | `pactresearch.net` (the domain both API keys may send for) | Nik, 2026-11-15/16 |
+| API key `feedbox-preview` | Sending access, domain `pactresearch.net`; **SECRET**, pasted only into feedbox-preview's SMTP password | Nik, 2026-11-15/16 |
+| API key `feedbox-prod` | Sending access, domain `pactresearch.net`; **SECRET**, pasted only into feedbox-prod's SMTP password | Nik, 2026-11-15/16 |
+
+One key per project, so either can be revoked without touching the other.
 
 ## Is TRIAD ready?
 `scripts/triad-ready.sh` (task T1) tells Nik, line by line, whether every piece of TRIAD is in place on the Mac before a session. Nik runs it in a NEW Terminal tab (not inside Claude Code):
