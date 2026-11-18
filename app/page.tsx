@@ -6,7 +6,6 @@ import {
   ideasForTab,
   isSearchable,
   parseSort,
-  SORT_LABELS,
   STATUSES,
   searchText,
   statusLabel,
@@ -15,6 +14,7 @@ import {
   type Idea,
 } from "@/lib/feedbox";
 import { SearchBox } from "@/components/SearchBox";
+import { SortMenu } from "@/components/SortMenu";
 import { StatusChip } from "@/components/StatusChip";
 import { VoteButton } from "@/components/VoteButton";
 import { getBoard, getIdeas, getMyVotes, getViewer, searchIdeaIds } from "@/lib/supabase/data";
@@ -43,7 +43,6 @@ export default async function BoardPage({
   }
   const myVotes = await getMyVotes(viewer, shown.map((i) => i.id));
   const signedIn = viewer.role !== "visitor";
-  const otherSort = sort === "top" ? "new" : "top";
 
   return (
     <main className="page">
@@ -66,13 +65,7 @@ export default async function BoardPage({
         </nav>
         <div className="tools">
           <SearchBox key={`${tab}-${sort}`} tab={tab} sort={sort} query={query} />
-          <Link
-            href={boardHref({ tab, sort: otherSort, q: query })}
-            className="btn"
-            aria-label={`Sort: ${SORT_LABELS[sort]}. Change to ${SORT_LABELS[otherSort]}`}
-          >
-            Sort: {SORT_LABELS[sort]}
-          </Link>
+          <SortMenu tab={tab} sort={sort} query={query} />
         </div>
       </div>
       {query && !isSearchable(query) ? (

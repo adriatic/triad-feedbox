@@ -3,9 +3,9 @@ import { STATUSES } from "./status";
 
 export type Sort = "top" | "new";
 
-/** The order of the sort control on the board ("Sort: Top", "Sort: New"). */
+/** The orders in the board's sort menu, and their names (task F5c: "Most votes", "Newest"; the address keeps top and new). */
 export const SORTS: readonly Sort[] = ["top", "new"] as const;
-export const SORT_LABELS: Readonly<Record<Sort, string>> = { top: "Top", new: "New" };
+export const SORT_LABELS: Readonly<Record<Sort, string>> = { top: "Most votes", new: "Newest" };
 
 /** Reads ?sort= from the URL. Anything unknown means Top. */
 export function parseSort(value: string | null | undefined): Sort {

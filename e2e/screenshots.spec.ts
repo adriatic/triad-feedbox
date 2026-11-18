@@ -44,6 +44,16 @@ const STATES: State[] = [
   { name: "board-visitor", as: "visitor", at: /^\/$/, open: (p) => go(p, "/") },
   { name: "board-planned-visitor", as: "visitor", at: /^\/\?tab=planned$/, open: (p) => go(p, "/?tab=planned") },
   { name: "board-sort-new-visitor", as: "visitor", at: /^\/\?sort=new$/, open: (p) => go(p, "/?sort=new") },
+  {
+    // Task F5c: the sort menu, open.
+    name: "board-sort-menu-visitor",
+    as: "visitor", at: /^\/$/,
+    open: async (p) => {
+      await go(p, "/");
+      await p.getByRole("button", { name: "Sort ideas: Most votes" }).click();
+      await expect(p.getByRole("menu", { name: "Sort ideas" })).toBeVisible();
+    },
+  },
   { name: "board-search-visitor", as: "visitor", at: /^\/\?q=laptop$/, open: (p) => go(p, "/?q=laptop") },
   { name: "board-signed-in", as: "sam", at: /^\/$/, open: (p) => go(p, "/") },
   { name: "board-owner", as: "ana", at: /^\/\?tab=planned$/, open: (p) => go(p, "/?tab=planned") },

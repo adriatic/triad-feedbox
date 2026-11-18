@@ -448,6 +448,62 @@ textarea {
   width: 160px;
   outline: none;
 }
+/* The sort control (task F5c): a button and its small menu. */
+.sort {
+  position: relative;
+  flex-shrink: 0;
+}
+.sort-button {
+  gap: 8px;
+  padding: 0 12px 0 14px;
+  white-space: nowrap;
+}
+.sort-button svg {
+  color: var(--muted);
+}
+.sort-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 10;
+  min-width: 190px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.14);
+}
+.sort-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 10px;
+  border-radius: 6px;
+  color: var(--ink);
+  font-size: 15px;
+}
+.sort-item svg {
+  color: var(--muted);
+}
+.sort-item:hover,
+.sort-item:focus-visible {
+  background: var(--open-bg);
+}
+.sort-item[aria-checked="true"] {
+  font-weight: 600;
+}
+.sort-item-label {
+  flex-grow: 1;
+}
+.sort-tick,
+.sort-tick svg {
+  width: 16px;
+  color: var(--accent);
+}
 .search:focus-within {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -720,7 +776,7 @@ textarea {
     padding: 14px 16px;
     gap: 10px;
   }
-  .brand-sub,
+  .brand-sub:not(.brand-page),
   .header-link {
     display: none;
   }
@@ -766,9 +822,11 @@ textarea {
   }
   .tools {
     flex-basis: 100%;
+    flex-wrap: nowrap;
   }
   .search {
     flex-grow: 1;
+    min-width: 0;
   }
   .search input {
     width: 100%;

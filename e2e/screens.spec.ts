@@ -50,15 +50,61 @@ test("a visitor reads the board: tabs, search, sort, an idea and the changelog",
   await expect(titles(page)).toHaveText(["Dark mode for the editor", "Offline mode"]);
   await expect(rows(page).first().getByRole("link", { name: "Sign in to vote for Dark mode for the editor, 214 votes" })).toBeVisible();
 
-  // Sort: Top (most votes) and New (newest first).
+  // Sort (task F5c): one button with the order's icon and name, and a menu of both orders.
+  // By mouse: Newest, then Most votes again.
   await tab(page, "Open").click();
-  await page.getByRole("link", { name: /^Sort: Top/ }).click();
+  const sortButton = page.getByRole("button", { name: "Sort ideas: Most votes" });
+  await expect(sortButton).toHaveText("Most votes");
+  await expect(sortButton).toHaveAttribute("aria-expanded", "false");
+  await sortButton.click();
+  const sortMenu = page.getByRole("menu", { name: "Sort ideas" });
+  await expect(sortMenu.getByRole("menuitemradio")).toHaveText(["Most votes", "Newest"]);
+  await expect(sortMenu.getByRole("menuitemradio", { name: "Most votes" })).toHaveAttribute("aria-checked", "true");
+  await expect(sortMenu.getByRole("menuitemradio", { name: "Newest" })).toHaveAttribute("aria-checked", "false");
+  await expect(sortMenu.locator("svg")).toHaveCount(3); // an icon on each choice, and the tick
+  await sortMenu.getByRole("menuitemradio", { name: "Newest" }).click();
   await expect(page).toHaveURL(/\/\?sort=new$/);
-  await expect(page.getByRole("link", { name: /^Sort: New/ })).toBeVisible();
+  await expect(sortMenu).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Sort ideas: Newest" })).toHaveText("Newest");
   await expect(titles(page)).toHaveText(["Tag notes by colour", "Share a note by link", "Search inside attachments", "Sync between two laptops"]);
-  await page.getByRole("link", { name: /^Sort: New/ }).click();
+  await page.getByRole("button", { name: "Sort ideas: Newest" }).click();
+  await expect(sortMenu.getByRole("menuitemradio", { name: "Newest" })).toHaveAttribute("aria-checked", "true");
+  await sortMenu.getByRole("menuitemradio", { name: "Most votes" }).click();
   await expect(page).toHaveURL(/\/$/);
+  await expect(titles(page)).toHaveText(["Sync between two laptops", "Search inside attachments", "Share a note by link", "Tag notes by colour"]);
 
+  // By keyboard: Tab to the button, Return opens the menu on the current order,
+  // the arrow keys move, Escape closes, Return chooses.
+  await page.getByRole("searchbox", { name: "Search ideas" }).focus();
+  await page.keyboard.press("Tab");
+  await expect(sortButton).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(sortButton).toHaveAttribute("aria-expanded", "true");
+  await expect(sortMenu.getByRole("menuitemradio", { name: "Most votes" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(sortMenu).toHaveCount(0);
+  await expect(sortButton).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(sortMenu.getByRole("menuitemradio", { name: "Most votes" })).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(sortMenu.getByRole("menuitemradio", { name: "Newest" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/\?sort=new$/);
+  await expect(titles(page)).toHaveText(["Tag notes by colour", "Share a note by link", "Search inside attachments", "Sync between two laptops"]);
+  const newest = page.getByRole("button", { name: "Sort ideas: Newest" });
+  await expect(newest).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(sortMenu.getByRole("menuitemradio", { name: "Newest" })).toBeFocused();
+  await page.keyboard.press("ArrowUp");
+  await expect(sortMenu.getByRole("menuitemradio", { name: "Most votes" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/$/);
+  await expect(titles(page)).toHaveText(["Sync between two laptops", "Search inside attachments", "Share a note by link", "Tag notes by colour"]);
+  // The order stays in the address: a page opened with ?sort=new shows Newest.
+  await page.goto("/?tab=shipped&sort=new");
+  await expect(page.getByRole("button", { name: "Sort ideas: Newest" })).toBeVisible();
+
+  await page.goto("/");
   // Search: similar_ideas on titles and details, within the tab; 300 ms after typing.
   const search = page.getByRole("searchbox", { name: "Search ideas" });
   await search.fill("laptop");
@@ -95,6 +141,33 @@ test("a visitor reads the board: tabs, search, sort, an idea and the changelog",
   await expect(page.getByRole("heading", { level: 1, name: "Keyboard shortcut cheat sheet" })).toBeVisible();
 });
 
+test("the header never links to the page you are on; the changelog has Back to the board (task F5c)", async ({ page }) => {
+  const header = page.locator("header.site-header");
+  // The board: "Changelog" leads to the changelog; the board's name is not a link here.
+  await page.goto("/");
+  await expect(header.getByRole("link", { name: "Lumen, all ideas" })).toHaveCount(0);
+  await expect(header.locator(".brand")).toContainText("Feedback and roadmap");
+  await header.getByRole("link", { name: "Changelog", exact: true }).click();
+  await expect(page).toHaveURL(/\/changelog$/);
+
+  // The changelog (Changelog.dc.html): "Lumen Changelog", the state pill and "Back to the board".
+  await expect(header.locator(".brand")).toHaveText("LLumenChangelog");
+  await expect(header.getByRole("link", { name: "Changelog", exact: true })).toHaveCount(0);
+  await expect(header.getByRole("link", { name: "Lumen, all ideas" })).toHaveCount(0);
+  await expect(viewerState(page)).toHaveText("Viewing as visitor");
+  await expect(header.getByRole("link")).toHaveText(["Back to the board", "Sign in"]);
+  await header.getByRole("link", { name: "Back to the board" }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("heading", { level: 1, name: "What should Lumen do next?" })).toBeVisible();
+
+  // Any other page keeps the Changelog link and the board's name as a link; /sign-in has no Sign in button.
+  await page.goto(`/ideas/${await ideaId("Dark mode for the editor")}`);
+  await expect(header.getByRole("link", { name: "Lumen, all ideas" })).toBeVisible();
+  await expect(header.getByRole("link")).toHaveText([/Lumen/, "Changelog", "Sign in"]);
+  await page.goto("/sign-in");
+  await expect(header.getByRole("link")).toHaveText([/Lumen/, "Changelog"]);
+});
+
 test("a visitor on a phone (390 px) sees the board and the header state", async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: "dark" });
   const page = await context.newPage();
@@ -102,6 +175,18 @@ test("a visitor on a phone (390 px) sees the board and the header state", async 
   await expect(viewerState(page)).toHaveText("Viewing as visitor");
   await expect(page.getByRole("link", { name: "Post an idea" })).toBeVisible();
   await expect(titles(page)).toHaveText(["Dark mode for the editor", "Offline mode"]);
+  // The sort button fits beside the search box, on the same row (task F5c), and its menu works.
+  const search = await page.locator("label.search").boundingBox();
+  const sort = page.getByRole("button", { name: "Sort ideas: Most votes" });
+  const sortBox = await sort.boundingBox();
+  expect(Math.abs(search!.y - sortBox!.y)).toBeLessThan(2);
+  expect(sortBox!.x).toBeGreaterThan(search!.x + search!.width);
+  expect(sortBox!.x + sortBox!.width).toBeLessThanOrEqual(390 - 16 + 1);
+  await sort.click();
+  await page.getByRole("menuitemradio", { name: "Newest" }).click();
+  await expect(page).toHaveURL(/\/\?tab=planned&sort=new$/);
+  await expect(titles(page)).toHaveText(["Dark mode for the editor", "Offline mode"]);
+  await expect(page.getByRole("button", { name: "Sort ideas: Newest" })).toBeVisible();
   // Nothing is wider than the phone.
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   // Dark: the page background is the design's dark --bg.
