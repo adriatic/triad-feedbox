@@ -220,7 +220,10 @@ isOneToOne: false
             [_ in never]: never
           }
           Functions: {
-            "has_display_name":
+            "board_owner_ids":
+{ Args: { "p_board_id": string }; Returns: string[]
+                           },
+"has_display_name":
 { Args: Record<PropertyKey, never>; Returns: boolean
                            },
 "hide_comment":

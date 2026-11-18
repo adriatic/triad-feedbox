@@ -2,9 +2,10 @@
 
 How the parts of Feedbox connect, written from the code at commit `1a13023` (tag `f5`, task A1).
 
-Every statement names the file it comes from, so it can be checked line by line. Line numbers refer to `1a13023`. Two short names are used throughout:
+Every statement names the file it comes from, so it can be checked line by line. Line numbers refer to `1a13023`, except in the parts updated by task O2 (the Owner mark for everyone), which say so. Three short names are used throughout:
 
-- **the migration** means `supabase/migrations/20261113000000_feedbox_v1.sql`;
+- **the migration** means `supabase/migrations/20261113000000_feedbox_v1.sql`, the Feedbox v1 migration;
+- **the O2 migration** means `supabase/migrations/20261118000000_board_owner_ids.sql` (task O2, decision F5-D1);
 - **data.ts** means `lib/supabase/data.ts`.
 
 If this file and the code disagree, the code is right and this file has a fault. CLAUDE.md requires every task that changes how the parts connect to update this file in the same pull request.
@@ -57,7 +58,7 @@ Next.js 16, App Router (`package.json`). It has five kinds of server code:
 
 Each hosted project has two parts the app uses: Postgres and Supabase Auth.
 
-**Postgres.** Everything is created by the migration.
+**Postgres.** Everything is created by the migration, except the function `board_owner_ids`, which the O2 migration adds.
 
 - **Eight tables** (migration lines 36-148): `boards`, `profiles`, `board_owners`, `ideas`, `votes`, `comments`, `changelog_entries`, `changelog_items`.
 - **Row-level security (RLS):** it is on for every table (lines 804-811), with policies at lines 813-928. The grants first revoke everything from `anon` and `authenticated` and then grant back only what is needed, column by column for writes (lines 726-797).
@@ -65,9 +66,10 @@ Each hosted project has two parts the app uses: Postgres and Supabase Auth.
   - `is_board_owner` (lines 172-185);
   - `has_display_name` (lines 190-203);
   - `similar_ideas` (lines 687-717);
+  - `board_owner_ids` (O2 migration lines 21-38): the user ids of one board's owners, and nothing else, for everyone. It is security definer with `search_path` set to `''`, stable, and only `anon` and `authenticated` may execute it (`supabase/tests/11_board_owner_ids.sql`);
   - the owner functions `set_idea_status`, `merge_ideas`, `hide_idea`, `unhide_idea`, `hide_comment`, `unhide_comment` and `publish_changelog_entry` (lines 463-677).
 
-  Today the app calls only `is_board_owner` (data.ts:44) and `similar_ideas` (data.ts:173, 199). The owner functions wait for F6.
+  Today the app calls only `is_board_owner` (data.ts:44), `similar_ideas` (data.ts:173, 199) and, since O2, `board_owner_ids` (`getOwnerIds` in data.ts). The owner functions wait for F6.
 - **Triggers** (lines 235-453):
   - a profile for every new user (5a);
   - rate limits of 5 ideas, 30 comments and 100 votes per person per hour (5b);
@@ -253,7 +255,7 @@ flowchart LR
    - **Rate limit:** 30 comments an hour (5b).
    - **Count:** a trigger keeps `comment_count` (5f).
 4. The action refreshes the idea page (`revalidatePath`, line 25). The comments are listed oldest first, flat (data.ts:118-136).
-5. The **Owner** mark appears next to a comment only when the viewer may read who the owners are (data.ts:138-151). See 3.10 and decision F5-D1.
+5. The **Owner** mark appears next to a comment written by an owner of the board, for every viewer: visitors, members and owners (task O2, decision F5-D1). `getOwnerIds` in data.ts asks `board_owner_ids` for the owners' ids; if that fails, for example in a project where the O2 migration has not run yet, the page still loads without the mark and the server logs the reason (`lib/supabase/data.test.ts`). See 3.10.
 
 ### 3.7 Signing in by email link
 
@@ -319,8 +321,9 @@ flowchart LR
 3. **Hidden ideas and comments:** an owner also sees them, marked "Hidden" (`app/page.tsx:36, 99`; `app/ideas/[id]/page.tsx:30, 51, 74`).
    - RLS lets owners read them (migration lines 836-838, 866-874).
    - Search and similar ideas still leave hidden ideas out (`similar_ideas`, line 713).
-4. **The Owner mark:** an owner sees **Owner** next to comments written by any owner of the board. The policy `board_owners_read` lets an owner read all owners of the board; anyone else reads at most their own row (migration lines 830-832; data.ts:138-151).
-   - So visitors and members never see the mark. This is decision F5-D1.
+4. **The Owner mark:** since task O2 (decision F5-D1, decided by Nik on 2026-11-18), everyone sees **Owner** next to comments written by any owner of the board, not only owners.
+   - The ids come from the function `board_owner_ids` (O2 migration lines 21-38), which returns the owners' user ids only, never an email or another column (`supabase/tests/11_board_owner_ids.sql`; `e2e/screens.spec.ts`, "everyone sees the Owner mark").
+   - The table `board_owners` and its policy `board_owners_read` are unchanged: reading the table directly, an owner sees all owners of the board and anyone else at most their own row (migration lines 830-832).
 5. **No owner tools in the app yet:** the database already has the owner functions (status, merge, hide and unhide, publish), but no page calls them. They arrive in F6.
 
 ## 4. Keys: which key is used where
@@ -370,7 +373,7 @@ Each rule names the test or check that guards it.
   - `NEXT_PUBLIC_SITE_URL` is optional, read in `lib/supabase/site.ts:10`.
   - In Vercel they are set per environment (CLAUDE.md, "App settings on Vercel"). Locally and in CI they come from `npx supabase status` (`playwright.config.ts:30-34`).
 - **Local Supabase settings:** `supabase/config.toml`. Where they differ from hosted, the difference is on purpose (CLAUDE.md, "Local Supabase against these settings").
-- **SQL that Nik runs on a hosted project:** files in `supabase/checks/`, `supabase/marker/` and `supabase/production/`, each reviewed and tested (CLAUDE.md, "SQL is code").
+- **SQL that Nik runs on a hosted project:** files in `supabase/checks/`, `supabase/marker/`, `supabase/production/` and, since task O2, `supabase/apply/` (a migration as Nik pastes it, guarded by the project marker), each reviewed and tested (CLAUDE.md, "SQL is code").
 
 ## 7. Not built yet, and open decisions
 
@@ -380,7 +383,7 @@ Each rule names the test or check that guards it.
 
 The database functions for all of these exist (migration lines 457-677) and are tested (`supabase/tests/06_owner_functions.sql`, `07_merge.sql`, `08_changelog.sql`).
 
-**Open decisions** (from the F5 report; not repeated here):
-- **F5-D1:** whether everyone may read who the board's owners are, so that the Owner mark shows for every viewer (see 3.10).
-- **F5-D2:** whether to build an end-to-end runner against the hosted Preview (`playwright.config.ts:4-7`).
+**Decisions** (from the F5 and A1 reports):
+- **F5-D1 (decided 2026-11-18, done in task O2):** everyone may read who the board's owners are, so the Owner mark shows for every viewer (see 3.6 and 3.10).
+- **F5-D2 (open):** whether to build an end-to-end runner against the hosted Preview (`playwright.config.ts:4-7`).
 - **A1-D2 (decided 2026-11-18, fixed later):** the search limit of 20 applies to the whole board before the tab is chosen (see 3.2); it is fixed later, with F6's database work or when a board grows, not now.

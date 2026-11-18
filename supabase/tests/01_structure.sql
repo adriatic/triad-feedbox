@@ -75,6 +75,7 @@ select results_eq(
      where p.pronamespace = 'public'::regnamespace
      order by 2, 1 $$,
   $$ values
+       ('anon', 'board_owner_ids', true),            ('authenticated', 'board_owner_ids', true),
        ('anon', 'has_display_name', true),           ('authenticated', 'has_display_name', true),
        ('anon', 'hide_comment', false),              ('authenticated', 'hide_comment', true),
        ('anon', 'hide_idea', false),                 ('authenticated', 'hide_idea', true),
