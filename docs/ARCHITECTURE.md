@@ -328,10 +328,10 @@ flowchart LR
 | Key | Where it is used | Where it lives |
 |---|---|---|
 | Publishable key of feedbox-preview or feedbox-prod (`sb_publishable_…`) | The app's server only: `lib/supabase/server.ts:12`, `proxy.ts:17-19`, read through `lib/supabase/env.ts:18-20` | Vercel setting `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, per environment (CLAUDE.md, "App settings on Vercel") |
-| Secret key of either hosted project | **Nowhere in the app, CI or the Mac.** No file reads one (`lib/supabase/env.ts:4-5`: "Only the publishable key is ever read") | Only in the Supabase dashboard, plus the GitHub Actions secret below |
+| Secret key of either hosted project | **Nowhere in the app, CI or the Mac.** No file reads one (`lib/supabase/env.ts:4-5`: "Only the publishable key is ever read") | Only in the Supabase dashboard (the GitHub Actions secrets below were deleted on 2026-11-18) |
 | Local development keys (publishable and secret) of the Supabase stack in Docker | Playwright and the e2e helpers, read at run time from `npx supabase status` and never written to a file (`e2e/local-supabase.ts:1-4`). The local secret key is used only by `e2e/helpers.ts:11-13`, to make sign-in links without email, set up a state, and tidy up | Printed by the local stack; valid only at 127.0.0.1 |
 | Resend API keys `feedbox-preview` and `feedbox-prod` | Supabase Auth's SMTP password, one key per project | Only in Supabase and Resend (CLAUDE.md, Resend) |
-| GitHub Actions secrets `SUPABASE_PREVIEW_URL`, `SUPABASE_PREVIEW_PUBLISHABLE_KEY`, `SUPABASE_PREVIEW_SECRET_KEY` (created 2026-11-13) | **Nothing uses them.** `.github/workflows/ci.yml` has no `secrets.` line, and no commit on any branch ever used them in a workflow | GitHub, repository settings (names seen with `gh secret list`; values never read) |
+| GitHub Actions secrets `SUPABASE_PREVIEW_URL`, `SUPABASE_PREVIEW_PUBLISHABLE_KEY`, `SUPABASE_PREVIEW_SECRET_KEY` (created 2026-11-13) | **Deleted on 2026-11-18** by Nik's decision A1-D1 (task A1a). Nothing ever used them: `.github/workflows/ci.yml` has no `secrets.` line, and no commit on any branch ever used them in a workflow | Nowhere. The repository has no Actions secret (`gh secret list` shows none); values were never read |
 
 **About the `NEXT_PUBLIC_` names:**
 
@@ -383,3 +383,4 @@ The database functions for all of these exist (migration lines 457-677) and are 
 **Open decisions** (from the F5 report; not repeated here):
 - **F5-D1:** whether everyone may read who the board's owners are, so that the Owner mark shows for every viewer (see 3.10).
 - **F5-D2:** whether to build an end-to-end runner against the hosted Preview (`playwright.config.ts:4-7`).
+- **A1-D2 (decided 2026-11-18, fixed later):** the search limit of 20 applies to the whole board before the tab is chosen (see 3.2); it is fixed later, with F6's database work or when a board grows, not now.
