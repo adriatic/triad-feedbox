@@ -200,7 +200,7 @@ flowchart LR
    - keeps scores of 0.3 or more;
    - leaves out merged and hidden ideas;
    - orders by score, then votes.
-4. The page shows the ideas of the current tab that are among those matches (`app/page.tsx:40-43`). With fewer than 3 characters it says "Type at least 3 characters to search." (line 79).
+4. The page shows the ideas of the current tab that are among those matches (`app/page.tsx:40-43`). The limit of 20 applies to the whole board, before the tab is chosen, so when more than 20 ideas on the board match, a tab can show fewer matches than it has. With fewer than 3 characters it says "Type at least 3 characters to search." (line 79).
 
 ### 3.3 Similar ideas while typing a title (Post an idea)
 
