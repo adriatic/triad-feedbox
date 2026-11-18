@@ -109,6 +109,8 @@ export interface CommentView {
   authorName: string;
   /** True when the author owns the board (see getOwnerIds; shown to every viewer since O2). */
   byOwner: boolean;
+  /** The title of the idea this comment was moved from by a merge (F1 section 5), or null. */
+  movedFrom: string | null;
   body: string;
   createdAt: string;
   hidden: boolean;
@@ -119,16 +121,22 @@ export async function getComments(boardId: string, ideaId: number): Promise<Comm
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("comments")
-    .select("id, author_id, body, created_at, hidden_at")
+    .select("id, author_id, body, created_at, hidden_at, moved_from_idea_id")
     .eq("idea_id", ideaId)
     .order("created_at", { ascending: true })
     .order("id", { ascending: true });
   if (error) throw new Error(`Could not read the comments: ${error.message}`);
-  const [names, owners] = await Promise.all([getDisplayNames(data.map((c) => c.author_id)), getOwnerIds(boardId)]);
+  const movedIds = [...new Set(data.flatMap((c) => (c.moved_from_idea_id === null ? [] : [c.moved_from_idea_id])))];
+  const [names, owners, movedTitles] = await Promise.all([
+    getDisplayNames(data.map((c) => c.author_id)),
+    getOwnerIds(boardId),
+    getIdeaTitles(movedIds),
+  ]);
   return data.map((c) => ({
     id: c.id,
     authorName: names.get(c.author_id) ?? "Someone",
     byOwner: owners.has(c.author_id),
+    movedFrom: c.moved_from_idea_id === null ? null : (movedTitles.get(c.moved_from_idea_id) ?? null),
     body: c.body,
     createdAt: c.created_at,
     hidden: c.hidden_at !== null,
@@ -158,6 +166,26 @@ export async function getOwnerIds(boardId: string): Promise<Set<string>> {
     return new Set();
   }
   return new Set(data ?? []);
+}
+
+/** Titles of ideas by id, as far as this viewer may read them (merged ideas stay readable). */
+export async function getIdeaTitles(ids: readonly number[]): Promise<Map<number, string>> {
+  if (ids.length === 0) return new Map();
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("ideas").select("id, title").in("id", [...ids]);
+  if (error) throw new Error(`Could not read idea titles: ${error.message}`);
+  return new Map(data.map((i) => [i.id, i.title]));
+}
+
+/** True when the idea is a line in a changelog entry, draft or published (owners read both). */
+export async function isInChangelog(ideaId: number): Promise<boolean> {
+  const supabase = await createClient();
+  const { count, error } = await supabase
+    .from("changelog_items")
+    .select("idea_id", { count: "exact", head: true })
+    .eq("idea_id", ideaId);
+  if (error) throw new Error(`Could not read the changelog lines: ${error.message}`);
+  return (count ?? 0) > 0;
 }
 
 /** The ideas this viewer has voted for (votes are readable by their own person only). */

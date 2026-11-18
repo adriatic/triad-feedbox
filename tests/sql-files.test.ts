@@ -29,6 +29,10 @@ describe("pasted SQL files", () => {
       "supabase/apply/prod-board-owner-ids.sql",
       "supabase/checks/preview-board-owner-ids.sql",
       "supabase/checks/prod-board-owner-ids.sql",
+      "supabase/preview/owner-nik.sql",
+      "supabase/checks/preview-owner-nik.sql",
+      "supabase/people/remove-person.sql",
+      "supabase/checks/person-removal.sql",
     ]));
   });
 
@@ -112,5 +116,44 @@ describe("the O2 migration (board_owner_ids, decision F5-D1)", () => {
       .replaceAll("preview-board-owner-ids", "FILE").replaceAll("prod-board-owner-ids", "FILE")
       .replace(/^-- Run once[\s\S]*?\n--\n/m, "");
     expect(strip(read(prod))).toBe(strip(read(preview)));
+  });
+});
+
+describe("task F6: Nik as an owner on feedbox-preview, and removing a person on request", () => {
+  const shared = read("supabase/checks/prod-board.sql").match(/-- shared:fingerprint:begin[\s\S]*?-- shared:fingerprint:end/)?.[0];
+
+  it.each(["supabase/preview/owner-nik.sql", "supabase/people/remove-person.sql"])(
+    "%s uses the fingerprint block of the checks word for word, and expects the v1 + O2 fingerprint",
+    (path) => {
+      expect(shared).toBeDefined();
+      const text = read(path);
+      expect(text).toContain(shared!);
+      expect(text).toContain("'ea60181fdd11e237aa19ee5d6d6c186d'");
+    },
+  );
+
+  // A copy for one request may change only the lines between "request:begin" and "request:end".
+  const outsideRequest = (text: string) =>
+    text.split("\n").slice(1).join("\n").replace(/-- request:begin[\s\S]*?-- request:end/, "-- request")
+      .replace(/-- end of [^\n]+\n$/, "");
+
+  it("the templates hold no request: no project and the empty id", () => {
+    for (const path of ["supabase/people/remove-person.sql", "supabase/checks/person-removal.sql"]) {
+      const block = read(path).match(/-- request:begin[\s\S]*?-- request:end/)?.[0] ?? "";
+      expect(block).toContain("'none'");
+      expect(block).toContain("'00000000-0000-0000-0000-000000000000'");
+    }
+  });
+
+  it("every copy for one request differs from its template only inside the block \"request\"", () => {
+    const copies = pastedSqlFiles(root).filter((f) =>
+      (/^supabase\/people\/remove-.+\.sql$/.test(f) && f !== "supabase/people/remove-person.sql") ||
+      (/^supabase\/checks\/person-removal-.+\.sql$/.test(f)));
+    for (const copy of copies) {
+      const template = copy.startsWith("supabase/people/") ? "supabase/people/remove-person.sql" : "supabase/checks/person-removal.sql";
+      expect(outsideRequest(read(copy)), copy).toBe(outsideRequest(read(template)));
+      // The request names a person by user id, never by an email address (this repository is public).
+      expect(read(copy).match(/-- request:begin[\s\S]*?-- request:end/)?.[0] ?? "", copy).not.toMatch(/@/);
+    }
   });
 });

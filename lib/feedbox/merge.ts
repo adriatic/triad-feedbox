@@ -37,3 +37,40 @@ export function mergeVotes(sourceVoters: readonly string[], targetVoters: readon
   }
   return { targetVoters: [...target], added };
 }
+
+export interface MergePreview {
+  /** The target's vote count after the merge is at least this (everyone who voted for the source already voted for the target)... */
+  votesAtLeast: number;
+  /** ...and at most this (nobody voted for both). */
+  votesAtMost: number;
+  /** Comments that move from the source to the target. */
+  commentsMoved: number;
+}
+
+/**
+ * What a merge will do, told before it happens (task F6, F1 section 5). The
+ * screen cannot know how many people voted for both ideas (a person's votes
+ * are readable by that person only), so the target's new count is given as a
+ * range: people who voted for both are counted once. merge_ideas returns the
+ * exact count, which the target's page then shows.
+ */
+export function mergePreview(
+  source: Pick<Idea, "voteCount" | "commentCount">,
+  target: Pick<Idea, "voteCount">,
+): MergePreview {
+  return {
+    votesAtLeast: Math.max(source.voteCount, target.voteCount),
+    votesAtMost: source.voteCount + target.voteCount,
+    commentsMoved: source.commentCount,
+  };
+}
+
+/** The ideas an idea can be merged into: visible, not merged, not the idea itself; best known first. */
+export function mergeTargets<T extends Pick<Idea, "id" | "title" | "voteCount" | "hiddenAt" | "mergedIntoId">>(
+  sourceId: number,
+  ideas: readonly T[],
+): T[] {
+  return ideas
+    .filter((i) => i.id !== sourceId && i.hiddenAt === null && i.mergedIntoId === null)
+    .sort((a, b) => b.voteCount - a.voteCount || a.title.localeCompare(b.title) || a.id - b.id);
+}

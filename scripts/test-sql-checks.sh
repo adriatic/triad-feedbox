@@ -250,6 +250,69 @@ echo "   The migration file gives the same database as the pasted script:"
 expect_check preview-board-owner-ids PASS
 expect_refusal "O2 preview script on the full local database" "$(cat $APPLY_PREVIEW)" "already exists"
 
+echo "== J. feedbox-preview: Nik becomes an owner of lumen (task F6)"
+NIK=supabase/preview/owner-nik.sql
+expect_check preview-owner-nik FAIL
+expect_refusal "preview owner script with no Nik I." "$(cat $NIK)" "no person outside the Lumen people"
+expect_success "Nik signs in on the Preview (test person)" "$(person j-nik)"
+expect_success "Nik sets his display name" "update public.profiles set display_name = 'Nik I.' where id = (select id from auth.users where email = 'j-nik@feedbox.test')"
+expect_refusal "preview owner script, a Lumen person named Nik I. does not count twice" "update public.profiles set display_name = 'Nik I.' where id = (select id from auth.users where email like '%@lumen.example' order by email limit 1); update public.profiles set display_name = 'Nik J.' where id = (select id from auth.users where email = 'j-nik@feedbox.test'); $(cat $NIK)" "no person outside the Lumen people"
+expect_refusal "preview owner script, project marked feedbox-prod" "update triad.project set name = 'feedbox-prod'; $(cat $NIK)" "only for feedbox-preview"
+expect_refusal "preview owner script, migration changed" "grant insert on public.ideas to anon; $(cat $NIK)" "does not match the reviewed Feedbox v1 and O2 migrations"
+expect_refusal "preview owner script, no board lumen" "update public.boards set slug = 'other' where slug = 'lumen'; $(cat $NIK)" "no board"
+expect_refusal "preview owner script, two people named Nik I." "$(person j-nik2); update public.profiles set display_name = 'Nik I.' where id = (select id from auth.users where email = 'j-nik2@feedbox.test'); $(cat $NIK)" "2 people outside the Lumen people"
+expect_refusal "preview owner script pasted twice" "$(twice $NIK)" "pasted twice into one query. Nothing was changed: the whole query is undone"
+expect_check preview-owner-nik FAIL
+expect_success "preview owner script" "$(cat $NIK)"
+expect_check preview-owner-nik PASS
+expect_check preview-owner-nik FAIL "update triad.project set name = 'feedbox-prod'"
+expect_check preview-owner-nik FAIL "delete from public.board_owners where user_id = (select id from auth.users where email = 'j-nik@feedbox.test')"
+expect_check preview-owner-nik FAIL "update public.profiles set display_name = 'Nik J.' where id = (select id from auth.users where email = 'j-nik@feedbox.test')"
+expect_check preview-owner-nik FAIL "insert into public.board_owners (board_id, user_id) select b.id, u.id from public.boards b, auth.users u where b.slug = 'lumen' and u.email = 'sam@lumen.example'"
+expect_check preview-owner-nik FAIL "grant insert on public.ideas to anon"
+expect_check preview-board-owner-ids PASS
+expect_refusal "preview owner script again" "$(cat $NIK)" "already an owner"
+
+echo "== K. Removing a person on request (task F6): the template, and a copy for one request"
+REMOVE=supabase/people/remove-person.sql
+COPIES=$(mktemp -d)
+trap 'rm -rf "$COPIES" supabase/checks/zz-person-removal-test.sql' EXIT
+OFFLINE_BASE=$(sql "select vote_count || '/' || comment_count from public.ideas where title = 'Offline mode'")
+# A copy for one request: only the two values in the block "request" change (tests/sql-files.test.ts).
+copy_for() { # <template> <project> <person id> <out>
+  sed -e "s/'none'/'$2'/" -e "s/'00000000-0000-0000-0000-000000000000'/'$3'/" "$1" > "$4"
+}
+expect_success "Del signs in and writes (test person)" "$(person k-del); update public.profiles set display_name = 'Del E.' where id = (select id from auth.users where email = 'k-del@feedbox.test');
+  insert into public.ideas (board_id, author_id, title) select b.id, u.id, 'K idea by Del' from public.boards b, auth.users u where b.slug = 'lumen' and u.email = 'k-del@feedbox.test';
+  insert into public.votes (idea_id, user_id) select i.id, u.id from public.ideas i, auth.users u where i.title = 'Offline mode' and u.email = 'k-del@feedbox.test';
+  insert into public.comments (idea_id, author_id, body) select i.id, u.id, 'K comment by Del' from public.ideas i, auth.users u where i.title = 'Offline mode' and u.email = 'k-del@feedbox.test';
+  insert into public.comments (idea_id, author_id, body) select i.id, u.id, 'K comment by Nik on Del''s idea' from public.ideas i, auth.users u where i.title = 'K idea by Del' and u.email = 'j-nik@feedbox.test'"
+DEL=$(sql "select id from auth.users where email = 'k-del@feedbox.test'")
+copy_for "$REMOVE" feedbox-preview "$DEL" "$COPIES/remove.sql"
+copy_for supabase/checks/person-removal.sql feedbox-preview "$DEL" supabase/checks/zz-person-removal-test.sql
+copy_for "$REMOVE" feedbox-prod "$DEL" "$COPIES/remove-prod.sql"
+expect_refusal "removal template as it is" "$(cat $REMOVE)" "this is the template"
+expect_check person-removal FAIL
+echo "   Before the removal, the copy of the check says what is still there:"
+expect_check zz-person-removal-test FAIL
+expect_refusal "removal copy for feedbox-prod, run in feedbox-preview" "$(cat $COPIES/remove-prod.sql)" "only for feedbox-prod"
+expect_refusal "removal copy, migration changed" "grant insert on public.ideas to anon; $(cat $COPIES/remove.sql)" "does not match the reviewed Feedbox v1 and O2 migrations"
+expect_refusal "removal copy, the person owns a board" "insert into public.board_owners (board_id, user_id) select b.id, '$DEL' from public.boards b where b.slug = 'lumen'; $(cat $COPIES/remove.sql)" "owns 1 board"
+expect_refusal "removal copy, another idea was merged into the person's idea" "insert into public.ideas (board_id, author_id, title) select b.id, u.id, 'K merged into Del' from public.boards b, auth.users u where b.slug = 'lumen' and u.email = 'j-nik@feedbox.test'; update public.ideas set merged_into_id = (select id from public.ideas where title = 'K idea by Del') where title = 'K merged into Del'; $(cat $COPIES/remove.sql)" "merged into ideas by this person"
+expect_refusal "removal copy pasted twice" "$(twice $COPIES/remove.sql)" "pasted twice into one query: then nothing was changed"
+expect_success "removal copy" "$(cat $COPIES/remove.sql)"
+expect_check zz-person-removal-test PASS
+OFFLINE_AFTER=$(sql "select vote_count || '/' || comment_count from public.ideas where title = 'Offline mode'")
+if [[ -n "$OFFLINE_BASE" && "$OFFLINE_AFTER" == "$OFFLINE_BASE" ]]; then
+  ok "the counts follow: Offline mode is back to $OFFLINE_BASE votes/comments without Del's vote and comment"
+else
+  bad "the counts on Offline mode: $OFFLINE_AFTER after the removal (expected $OFFLINE_BASE, as before Del)"
+fi
+expect_check zz-person-removal-test FAIL "update triad.project set name = 'feedbox-prod'"
+expect_check preview-owner-nik PASS
+expect_refusal "removal copy again" "$(cat $COPIES/remove.sql)" "no person with the id"
+rm -rf "$COPIES" supabase/checks/zz-person-removal-test.sql
+
 echo "== E. Back to the normal local database"
 reset
 echo

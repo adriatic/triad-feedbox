@@ -2,7 +2,7 @@
 
 How the parts of Feedbox connect, written from the code at commit `1a13023` (tag `f5`, task A1).
 
-Every statement names the file it comes from, so it can be checked line by line. Line numbers refer to `1a13023`, except in the parts updated by task O2 (the Owner mark for everyone), which say so. Three short names are used throughout:
+Every statement names the file it comes from, so it can be checked line by line. Line numbers refer to `1a13023`, except in the parts updated by task O2 (the Owner mark for everyone) and task F6 (the owner tools and the changelog editor), which name files and functions instead. Three short names are used throughout:
 
 - **the migration** means `supabase/migrations/20261113000000_feedbox_v1.sql`, the Feedbox v1 migration;
 - **the O2 migration** means `supabase/migrations/20261118000000_board_owner_ids.sql` (task O2, decision F5-D1);
@@ -45,7 +45,7 @@ Next.js 16, App Router (`package.json`). It has five kinds of server code:
 | Kind | Files | What it does |
 |---|---|---|
 | Pages (server components) | `app/page.tsx` (the board), `app/ideas/[id]/page.tsx`, `app/ideas/new/page.tsx`, `app/changelog/page.tsx`, `app/changelog/new/page.tsx`, `app/sign-in/page.tsx`, `app/auth/confirm/page.tsx`, `app/welcome/page.tsx`, `app/not-found.tsx`, `app/layout.tsx` | Read from Supabase on the server and render HTML |
-| Server actions (`"use server"`) | `app/ideas/new/actions.ts` (`postIdea`, `findSimilar`), `app/ideas/[id]/actions.ts` (`addComment`), `components/vote-action.ts` (`vote`), `app/sign-in/actions.ts` (`sendLink`), `app/auth/confirm/actions.ts` (`finishSignIn`), `app/welcome/actions.ts` (`saveDisplayName`) | Called by the browser's forms and buttons; they run on the server and call Supabase |
+| Server actions (`"use server"`) | `app/ideas/new/actions.ts` (`postIdea`, `findSimilar`), `app/ideas/[id]/actions.ts` (`addComment`), `app/ideas/[id]/owner-actions.ts` (`changeStatus`, `mergeInto`, `setIdeaHidden`, `setCommentHidden`; task F6), `app/changelog/new/actions.ts` (`publishEntry`; task F6), `components/vote-action.ts` (`vote`), `app/sign-in/actions.ts` (`sendLink`), `app/auth/confirm/actions.ts` (`finishSignIn`), `app/welcome/actions.ts` (`saveDisplayName`) | Called by the browser's forms and buttons; they run on the server and call Supabase |
 | Route handler | `app/auth/sign-out/route.ts` | `POST` signs out; `GET` answers 405 |
 | Proxy (Next.js 16's name for middleware) | `proxy.ts` | Runs before every page request: refreshes the session cookies and sends a person without a display name to /welcome |
 | Server-side Supabase access | `lib/supabase/server.ts` (the client), data.ts (all reads, and the vote write), `lib/supabase/env.ts` (settings), `lib/supabase/site.ts` (the site's own address) | The only way the app reaches Supabase |
@@ -69,7 +69,7 @@ Each hosted project has two parts the app uses: Postgres and Supabase Auth.
   - `board_owner_ids` (O2 migration lines 21-38): the user ids of one board's owners, and nothing else, for everyone. It is security definer with `search_path` set to `''`, stable, and only `anon` and `authenticated` may execute it (`supabase/tests/11_board_owner_ids.sql`);
   - the owner functions `set_idea_status`, `merge_ideas`, `hide_idea`, `unhide_idea`, `hide_comment`, `unhide_comment` and `publish_changelog_entry` (lines 463-677).
 
-  Today the app calls only `is_board_owner` (data.ts:44), `similar_ideas` (data.ts:173, 199) and, since O2, `board_owner_ids` (`getOwnerIds` in data.ts). The owner functions wait for F6.
+  The app calls `is_board_owner` (data.ts:44), `similar_ideas` (data.ts:173, 199), since O2 `board_owner_ids` (`getOwnerIds` in data.ts), and since F6 every owner function, each from one server action (3.10).
 - **Triggers** (lines 235-453):
   - a profile for every new user (5a);
   - rate limits of 5 ideas, 30 comments and 100 votes per person per hour (5b);
@@ -256,6 +256,8 @@ flowchart LR
    - **Count:** a trigger keeps `comment_count` (5f).
 4. The action refreshes the idea page (`revalidatePath`, line 25). The comments are listed oldest first, flat (data.ts:118-136).
 5. The **Owner** mark appears next to a comment written by an owner of the board, for every viewer: visitors, members and owners (task O2, decision F5-D1). `getOwnerIds` in data.ts asks `board_owner_ids` for the owners' ids; if that fails, for example in a project where the O2 migration has not run yet, the page still loads without the mark and the server logs the reason (`lib/supabase/data.test.ts`). See 3.10.
+6. **Hidden comments (task F6):** an owner has **Hide comment** or **Unhide comment** on every comment (`CommentHideButton` in `app/ideas/[id]/OwnerTools.tsx`, server action `setCommentHidden` in `app/ideas/[id]/owner-actions.ts`, database functions `hide_comment` and `unhide_comment`). A hidden comment is marked "Hidden" for owners; for everyone else RLS leaves it out (migration lines 866-874) and it does not count in `comment_count` (5f).
+7. **Moved comments (task F6):** a comment that a merge moved here reads "From the merged idea “<title>”" (`moved_from_idea_id`, read by `getComments` with `getIdeaTitles` in data.ts).
 
 ### 3.7 Signing in by email link
 
@@ -312,19 +314,31 @@ flowchart LR
 2. `publishedChangelog` (`lib/feedbox/changelog.ts:23-50`) keeps only published entries and orders them newest release first. It drops lines whose idea is hidden and entries left with no lines.
 3. Each release date is a calendar date, shown as written in any time zone (`formatDate`, `lib/feedbox/format.ts:26-31`).
 4. Each line links to its idea. On /changelog the header reads "<board> Changelog" with **Back to the board**, and neither the header nor the footer links to /changelog (`components/Header.tsx:19-55`, `components/Footer.tsx:10-21`).
-5. `/changelog/new` is a bare page for owners that lists drafts. The editor arrives in F6 (`app/changelog/new/page.tsx`).
+5. **Owners** see the button **Write a changelog entry**, which leads to the editor `/changelog/new` (`app/changelog/page.tsx`, task F6). Nobody else sees it.
+6. **The editor** (`app/changelog/new/page.tsx` and `ChangelogForm.tsx`, task F6; no design exists, so it reuses the Post an idea layout):
+   - a visitor is sent to sign in; a member reads "Only the owners of <board> can write the changelog.";
+   - it offers the Shipped, visible, unmerged ideas that are in no entry yet (`ideasReadyForChangelog`, `lib/feedbox/changelog.ts`), all ticked, each with one line to write; the release date starts as the owner's own today;
+   - **Publish** calls the server action `publishEntry` (`app/changelog/new/actions.ts`). It checks the title, date and lines with the core library (`validateChangelogTitle`, `validateReleaseDate`, `validateChangelogNote`, `checkChangelogPicks`), then, with the owner's session, inserts the entry (policy `changelog_entries_insert_owner`), its lines (policy `changelog_items_insert_owner`; the trigger 5g accepts only Shipped ideas of the same board), and calls `publish_changelog_entry`;
+   - these are three requests, not one transaction: if a later one fails, the action deletes the entry it made (policy `changelog_entries_delete_owner`; its lines go with it), so no half-made draft stays;
+   - afterwards the owner lands on `/changelog`, where the entry shows at once.
 
-### 3.10 What an owner sees today
+### 3.10 What an owner sees and does
 
 1. **Who is an owner:** a person listed in `board_owners` for this board. Rows are added by reviewed SQL only, for example `supabase/production/owner-nik.sql`; there is no insert policy (migration lines 828-832). `getViewer` calls `is_board_owner` (data.ts:43-46).
 2. **The header** reads "Signed in as owner" (`viewerStateLabel`, `lib/feedbox/permissions.ts:49-53`).
-3. **Hidden ideas and comments:** an owner also sees them, marked "Hidden" (`app/page.tsx:36, 99`; `app/ideas/[id]/page.tsx:30, 51, 74`).
+3. **Hidden ideas and comments:** an owner also sees them, marked "Hidden", in the board's lists and on the idea page (`app/page.tsx:36, 99`; `app/ideas/[id]/page.tsx`). Visitors and members never see them: RLS does not return them, and a hidden idea's page answers "This page could not be found." (`canSeeIdea`, `lib/feedbox/permissions.ts`).
    - RLS lets owners read them (migration lines 836-838, 866-874).
    - Search and similar ideas still leave hidden ideas out (`similar_ideas`, line 713).
 4. **The Owner mark:** since task O2 (decision F5-D1, decided by Nik on 2026-11-18), everyone sees **Owner** next to comments written by any owner of the board, not only owners.
    - The ids come from the function `board_owner_ids` (O2 migration lines 21-38), which returns the owners' user ids only, never an email or another column (`supabase/tests/11_board_owner_ids.sql`; `e2e/screens.spec.ts`, "everyone sees the Owner mark").
    - The table `board_owners` and its policy `board_owners_read` are unchanged: reading the table directly, an owner sees all owners of the board and anyone else at most their own row (migration lines 830-832).
-5. **No owner tools in the app yet:** the database already has the owner functions (status, merge, hide and unhide, publish), but no page calls them. They arrive in F6.
+5. **The Owner tools** (task F6, as in `Idea.dc.html`): on every idea page an owner sees the box **Owner tools** (`OwnerTools` in `app/ideas/[id]/OwnerTools.tsx`). Visitors and members never get it: the page renders it only for the role `owner`, and every function behind it checks `is_board_owner` again (42501 otherwise). Each tool is a form that calls one server action in `app/ideas/[id]/owner-actions.ts`, which calls one owner function with the owner's own session; the browser never calls Supabase. Refusals come back in words (`ownerRefusalMessage`, `lib/feedbox/screens.ts`: the database's own message for 23514).
+   - **Status:** a list of Open, Planned, Building and Shipped and **Change status** → `changeStatus` → `set_idea_status`. Any change but "the same again" is allowed; an idea in a changelog entry stays Shipped, so the list is disabled with a note (`isInChangelog` in data.ts; trigger 5c in the database).
+   - **Merge into another idea:** opens a panel. The owner picks the target from the visible, unmerged ideas (`mergeTargets`, `lib/feedbox/merge.ts`), and the panel says what will happen before the button: the target's new vote count as a range, since a person's votes are readable only by that person (`mergePreview`), the comments that move, that the idea leaves the board, and "There is no undo." The button → `mergeInto` → `merge_ideas` (migration lines 493-559): votes copied without double counting, comments moved with `moved_from_idea_id`, the idea marked `merged_into_id`.
+   - **After a merge:** the owner lands on the target at `/ideas/<target>?merged=<source>`, which says "“<source>” was merged into this idea. Its votes and comments are here now: N votes in all." The source's own address leads there too (a temporary redirect, since a wrong merge can be repaired by hand); the note shows only when the source really was merged into this idea.
+   - **Hide idea / Unhide idea:** → `setIdeaHidden` → `hide_idea` or `unhide_idea`.
+6. **The changelog editor:** see 3.9.
+7. **Guarded by:** `e2e/owner.spec.ts` (status, merge with its counts, hide and unhide of an idea and a comment, publishing; a member and a visitor never see the panel, the hidden items or the editor) and, in the database, `supabase/tests/06_owner_functions.sql`, `07_merge.sql` and `08_changelog.sql`.
 
 ## 4. Keys: which key is used where
 
@@ -348,7 +362,7 @@ Each rule names the test or check that guards it.
 
 | # | Never… | Guarded by |
 |---|---|---|
-| 1 | The browser never calls Supabase itself; every read and write goes through the app's server | `e2e/screens.spec.ts:11-26`: every test in that file aborts and records any browser request to the local Supabase API, and fails if there was one (task F5b). `lib/supabase/env.test.ts:31` checks that only `env.ts` reads the Supabase settings |
+| 1 | The browser never calls Supabase itself; every read and write goes through the app's server | `e2e/fixtures.ts` (since task F6; before, only `e2e/screens.spec.ts`): every test in `auth.spec.ts`, `owner.spec.ts` and `screens.spec.ts` aborts and records any browser request to the local Supabase API, and fails if there was one (task F5b). `lib/supabase/env.test.ts` checks that only `env.ts` reads the Supabase settings |
 | 2 | No secret key in the app, on the Mac or in a commit | CLAUDE.md, "Three rules" 1 and 3; `.gitignore` excludes every `.env*`; `e2e/local-supabase.ts:26-28` refuses any Supabase address but 127.0.0.1 |
 | 3 | A table never goes without row-level security, and anon and authenticated never get more than the listed grants | `supabase/tests/01_structure.sql`: RLS on every table, exact table and column privileges, and `search_path=''` on every security definer function |
 | 4 | Never more than one vote per person per idea | The primary key on `votes` (migration lines 98-103); `supabase/tests/04_votes.sql` (a second vote fails with 23505; nobody votes as someone else); `e2e/screens.spec.ts:288` (a double click, a reload and a second insert through the API give one vote) |
@@ -364,6 +378,9 @@ Each rule names the test or check that guards it.
 | 14 | A profile never holds an email address, and a display name never contains "@" | `profiles` has no email column; check `profiles_display_name_check` (migration lines 53-59); `supabase/tests/01_structure.sql`; `e2e/auth.spec.ts:68` |
 | 15 | A migration is never edited after it ran on feedbox-preview | `tests/sql-files.test.ts:68-74` pins the file's sha256 |
 | 16 | The tests never touch a hosted project | `e2e/local-supabase.ts:26-28`; `ci.yml` (no secrets; local Supabase only); CLAUDE.md, "Three rules" 2 |
+| 17 | Only an owner of the board changes a status, merges, hides or unhides, or publishes the changelog, and only through the owner functions | The functions check `is_board_owner` (migration section 6); no grant lets anyone write `status`, `merged_into_id`, `hidden_at` or `published_at` (rule 5); the app calls them only from server actions; `supabase/tests/06_owner_functions.sql`, `07_merge.sql`, `08_changelog.sql`; `e2e/owner.spec.ts` |
+| 18 | Visitors and members never see the Owner tools, hidden ideas or comments, or the changelog editor | RLS (migration lines 836-838, 866-874, 888-890); the pages render the tools only for owners; `e2e/owner.spec.ts` (task F6) |
+| 19 | A person becomes an owner, or is removed, only by a reviewed script, never from the app | No insert policy on `board_owners`; `supabase/production/owner-nik.sql`, `supabase/preview/owner-nik.sql`, `supabase/people/remove-person.sql`, each with its check and tested in `scripts/test-sql-checks.sh`; a removal copy may change only its block "request" (`tests/sql-files.test.ts`) |
 
 ## 6. Where settings live
 
@@ -373,17 +390,16 @@ Each rule names the test or check that guards it.
   - `NEXT_PUBLIC_SITE_URL` is optional, read in `lib/supabase/site.ts:10`.
   - In Vercel they are set per environment (CLAUDE.md, "App settings on Vercel"). Locally and in CI they come from `npx supabase status` (`playwright.config.ts:30-34`).
 - **Local Supabase settings:** `supabase/config.toml`. Where they differ from hosted, the difference is on purpose (CLAUDE.md, "Local Supabase against these settings").
-- **SQL that Nik runs on a hosted project:** files in `supabase/checks/`, `supabase/marker/`, `supabase/production/` and, since task O2, `supabase/apply/` (a migration as Nik pastes it, guarded by the project marker), each reviewed and tested (CLAUDE.md, "SQL is code").
+- **SQL that Nik runs on a hosted project:** files in `supabase/checks/`, `supabase/marker/`, `supabase/production/`, since task O2 `supabase/apply/` (a migration as Nik pastes it, guarded by the project marker), and since task F6 `supabase/preview/` (scripts for feedbox-preview only) and `supabase/people/` (removing a person on request: a template, copied per request), each reviewed and tested (CLAUDE.md, "SQL is code").
 
 ## 7. Not built yet, and open decisions
 
-**Not built yet (task F6):**
-- The owner tools on the idea page: change status, merge, hide and unhide ideas and comments (`app/ideas/[id]/page.tsx:11`).
-- The changelog editor (`app/changelog/new/page.tsx:5, 30`).
+**Built in task F6:** the owner tools on the idea page and the changelog editor (3.6, 3.9, 3.10).
 
-The database functions for all of these exist (migration lines 457-677) and are tested (`supabase/tests/06_owner_functions.sql`, `07_merge.sql`, `08_changelog.sql`).
+**Not built in version 1 (F1, section 11):** undoing a merge, CAPTCHA, many boards per deployment, and editing or unpublishing a changelog entry in the app (the database allows both for owners; no screen offers them). The check of the hosted Preview is task P1.
 
 **Decisions** (from the F5 and A1 reports):
 - **F5-D1 (decided 2026-11-18, done in task O2):** everyone may read who the board's owners are, so the Owner mark shows for every viewer (see 3.6 and 3.10).
 - **F5-D2 (open):** whether to build an end-to-end runner against the hosted Preview (`playwright.config.ts:4-7`).
-- **A1-D2 (decided 2026-11-18, fixed later):** the search limit of 20 applies to the whole board before the tab is chosen (see 3.2); it is fixed later, with F6's database work or when a board grows, not now.
+- **A1-D2 (decided 2026-11-18, fixed later):** the search limit of 20 applies to the whole board before the tab is chosen (see 3.2); it is fixed later, with F6's database work or when a board grows, not now. F6 needed no database change; see the F6 report, decision F6-D2.
+- **F6-D1 (open):** whether owners should find hidden ideas by the board's search (`similar_ideas` leaves them out, migration line 713).

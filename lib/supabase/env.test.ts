@@ -28,7 +28,7 @@ describe("app settings", () => {
     expect(boardSlug()).toBe("lumen");
   });
 
-  it("the proxy, the browser client and the server client read the Supabase settings only through env.ts", () => {
+  it("the proxy and the server client read the Supabase settings only through env.ts", () => {
     const root = join(__dirname, "..", "..");
     const files: string[] = ["proxy.ts"];
     const walk = (dir: string) => {

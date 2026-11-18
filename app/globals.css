@@ -873,3 +873,154 @@ textarea {
     flex-basis: 100%;
   }
 }
+
+/* ---- Owner tools (Idea.dc.html, task F6): owners only ---- */
+.owner-tools {
+  background: var(--card);
+  border: 1px dashed var(--accent);
+  border-radius: 12px;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.owner-tools-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+}
+.owner-tools-row form {
+  margin: 0;
+}
+.owner-tools-title {
+  font-weight: 600;
+  color: var(--accent);
+}
+.owner-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.select {
+  background: var(--card);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 10px;
+  min-height: 44px;
+  font-size: 15px;
+  max-width: 100%;
+}
+.owner-done {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+.merge-panel {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.merge-preview ul {
+  margin: 6px 0 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.merge-preview .label {
+  margin: 0;
+}
+.merge-warning {
+  margin: 10px 0 0;
+  font-weight: 600;
+  color: var(--alert-fg);
+  background: var(--alert-bg);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+.link-button {
+  background: none;
+  border: none;
+  padding: 10px 6px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+}
+.link-button.cancel-link {
+  color: var(--muted);
+}
+.link-button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+.comment-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: -10px 0 -10px 8px;
+}
+.comment-head .chip-hidden {
+  margin-left: 6px;
+}
+.comment-moved {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.merged-note {
+  margin: 0;
+  background: var(--planned-bg);
+  color: var(--planned-fg);
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+
+/* ---- Changelog editor (/changelog/new, task F6): the Post an idea layout ---- */
+.changelog-picks {
+  border: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.changelog-picks legend {
+  font-weight: 600;
+  padding: 0;
+  margin-bottom: 4px;
+}
+.changelog-pick {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.changelog-pick-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-weight: 600;
+}
+.changelog-pick-head input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+}
+.page-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}

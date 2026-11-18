@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkMerge, mergeVotes } from "./merge";
+import { checkMerge, mergePreview, mergeTargets, mergeVotes } from "./merge";
 import { idea } from "./fixtures.test-helper";
 
 const sync = idea({ id: 6, title: "Sync between two laptops" });
@@ -36,5 +36,30 @@ describe("Merging duplicates (F1 section 5)", () => {
   it("the target grows by the new voters only, not by the source's total", () => {
     expect(mergeVotes(["tom", "mira"], ["tom", "mira"]).added).toBe(0);
     expect(mergeVotes([], ["tom"]).added).toBe(0);
+  });
+});
+
+describe("What a merge will do, told before it happens (task F6)", () => {
+  it("gives the target's new vote count as a range, since people who voted for both are counted once", () => {
+    expect(mergePreview({ voteCount: 3, commentCount: 2 }, { voteCount: 10 })).toEqual({
+      votesAtLeast: 10,
+      votesAtMost: 13,
+      commentsMoved: 2,
+    });
+  });
+
+  it("never promises fewer votes than the source had", () => {
+    expect(mergePreview({ voteCount: 12, commentCount: 0 }, { voteCount: 1 }).votesAtLeast).toBe(12);
+  });
+
+  it("offers as targets only visible, unmerged ideas other than the source, most votes first", () => {
+    const ideas = [
+      idea({ id: 1, title: "A", voteCount: 5 }),
+      idea({ id: 2, title: "B", voteCount: 9 }),
+      idea({ id: 3, title: "C", voteCount: 7, hiddenAt: "2026-11-01T00:00:00Z" }),
+      idea({ id: 4, title: "D", voteCount: 8, mergedIntoId: 2 }),
+      idea({ id: 5, title: "E", voteCount: 5 }),
+    ];
+    expect(mergeTargets(1, ideas).map((i) => i.id)).toEqual([2, 5]);
   });
 });

@@ -84,3 +84,15 @@ export function refusalMessage(error: DbError, what: string): string {
   if (isRateLimited(error)) return RATE_LIMIT_MESSAGE;
   return `${what} did not work. Reload the page and try again.`;
 }
+
+/**
+ * Why an owner tool did not work (task F6), from the owner functions' errors
+ * (migration section 6: 42501 not an owner, P0002 not found, 23514 a rule
+ * refuses it, with a message written for people).
+ */
+export function ownerRefusalMessage(error: DbError, what: string): string {
+  if (error.code === "42501") return "Only an owner of this board can do this. Reload the page: you may have been signed out.";
+  if (error.code === "P0002") return `${what} did not work: it no longer exists. Reload the page.`;
+  if (error.code === "23514" && error.message) return error.message;
+  return refusalMessage(error, what);
+}
