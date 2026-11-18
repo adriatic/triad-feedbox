@@ -196,7 +196,8 @@ test("a person who exists but never confirmed gets the Confirm signup email agai
 
 test("every route reads the board as a visitor", async ({ page }) => {
   await page.goto("/?tab=shipped&sort=new");
-  await expect(page.getByRole("link", { name: /^Shipped \d+$/ })).toHaveAttribute("aria-current", "page");
+  // The current tab is not a link (task F5d).
+  await expect(page.locator('.tab[aria-current="page"]')).toHaveText(/^Shipped \d+$/);
   const first = page.getByTestId("idea-list").locator(".idea-title").first();
   const title = await first.textContent();
   await first.click();

@@ -57,11 +57,18 @@ export default async function BoardPage({
       </div>
       <div className="toolbar">
         <nav className="tabs" aria-label="Ideas by status">
-          {STATUSES.map((s) => (
-            <Link key={s} href={boardHref({ tab: s, sort, q: query })} className="tab" aria-current={s === tab ? "page" : undefined}>
-              {statusLabel(s)} <span className="tab-count">{counts[s]}</span>
-            </Link>
-          ))}
+          {/* The current tab is not a link: it would lead to the page you are on (task F5d). */}
+          {STATUSES.map((s) =>
+            s === tab ? (
+              <span key={s} className="tab" aria-current="page">
+                {statusLabel(s)} <span className="tab-count">{counts[s]}</span>
+              </span>
+            ) : (
+              <Link key={s} href={boardHref({ tab: s, sort, q: query })} className="tab">
+                {statusLabel(s)} <span className="tab-count">{counts[s]}</span>
+              </Link>
+            ),
+          )}
         </nav>
         <div className="tools">
           <SearchBox key={`${tab}-${sort}`} tab={tab} sort={sort} query={query} />

@@ -27,7 +27,8 @@ test.afterEach(() => {
 
 const rows = (page: Page) => page.getByTestId("idea-row");
 const titles = (page: Page) => rows(page).locator(".idea-title");
-const tab = (page: Page, name: string) => page.getByRole("navigation", { name: "Ideas by status" }).getByRole("link", { name: new RegExp(`^${name} \\d+$`) });
+// The current tab is not a link (task F5d), so tabs are found by their class.
+const tab = (page: Page, name: string) => page.getByRole("navigation", { name: "Ideas by status" }).locator(".tab").filter({ hasText: new RegExp(`^${name} \\d+$`) });
 const voteIn = (page: Page, title: string) => rows(page).filter({ hasText: title }).getByRole("button", { name: new RegExp(`: ${title}$`) });
 
 test("a visitor reads the board: tabs, search, sort, an idea and the changelog", async ({ page }) => {
@@ -166,6 +167,50 @@ test("the header never links to the page you are on; the changelog has Back to t
   await expect(header.getByRole("link")).toHaveText([/Lumen/, "Changelog", "Sign in"]);
   await page.goto("/sign-in");
   await expect(header.getByRole("link")).toHaveText([/Lumen/, "Changelog"]);
+});
+
+test("nothing links to the page you are on: the footer, the tabs and the sort menu (task F5d)", async ({ page }) => {
+  const footer = page.locator("footer.site-footer");
+  // The board: the footer leads to the changelog.
+  await page.goto("/");
+  await expect(footer).toHaveText("Lumen runs on Feedbox, a free, open-source feedback board. See what shipped");
+  await expect(footer.locator('a[href="/changelog"]')).toHaveCount(1);
+  await expect(footer.getByRole("link", { name: "See what shipped" })).toBeVisible();
+
+  // The current tab is not a link; the other tabs are.
+  const tabs = page.getByRole("navigation", { name: "Ideas by status" });
+  await expect(tabs.getByRole("link")).toHaveText(["Planned 2", "Building 1", "Shipped 3"]);
+  await expect(tab(page, "Open")).toHaveAttribute("aria-current", "page");
+
+  // The sort menu: the ticked order is not a link; choosing it (Return) only closes the menu.
+  await page.getByRole("button", { name: "Sort ideas: Most votes" }).click();
+  const sortMenu = page.getByRole("menu", { name: "Sort ideas" });
+  await expect(sortMenu.locator("a")).toHaveCount(1);
+  await expect(sortMenu.locator("a")).toHaveAttribute("href", "/?sort=new");
+  await expect(sortMenu.getByRole("menuitemradio", { name: "Most votes" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(sortMenu).toHaveCount(0);
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("button", { name: "Sort ideas: Most votes" })).toBeFocused();
+
+  // The changelog: the footer keeps its words but has no link to the changelog.
+  await footer.getByRole("link", { name: "See what shipped" }).click();
+  await expect(page).toHaveURL(/\/changelog$/);
+  await expect(page.getByRole("heading", { level: 1, name: "What shipped in Lumen" })).toBeVisible();
+  await expect(footer).toHaveText("Lumen runs on Feedbox, a free, open-source feedback board.");
+  await expect(footer.locator('a[href="/changelog"]')).toHaveCount(0);
+  await expect(footer.getByRole("link")).toHaveCount(0);
+
+  // Every page a visitor can open: no link anywhere on it leads to its own address.
+  const pages = ["/", "/?tab=planned", "/?sort=new", "/?q=sync", "/changelog", `/ideas/${await ideaId("Dark mode for the editor")}`, "/sign-in", "/sign-in?next=%2Fchangelog"];
+  for (const path of pages) {
+    await page.goto(path);
+    await expect(page.locator("header.site-header")).toBeVisible();
+    const self = await page.evaluate(() =>
+      [...document.querySelectorAll("a[href]")].filter((a) => (a as HTMLAnchorElement).href === location.href).map((a) => a.outerHTML.slice(0, 120)),
+    );
+    expect(self, `links to ${path} on ${path}`).toEqual([]);
+  }
 });
 
 test("a visitor on a phone (390 px) sees the board and the header state", async ({ browser }) => {

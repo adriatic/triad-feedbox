@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
-import Link from "next/link";
 import { Suspense, type ReactNode } from "react";
+import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
 import { getBoard, getViewer } from "@/lib/supabase/data";
 import "./globals.css";
@@ -33,9 +33,9 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
           <Header board={board} viewer={viewer} />
         </Suspense>
         {children}
-        <footer className="site-footer">
-          {board?.name ?? "Feedbox"} runs on Feedbox, a free, open-source feedback board. <Link href="/changelog">See what shipped</Link>
-        </footer>
+        <Suspense>
+          <Footer boardName={board?.name ?? "Feedbox"} />
+        </Suspense>
       </body>
     </html>
   );

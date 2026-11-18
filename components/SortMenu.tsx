@@ -45,13 +45,16 @@ const Chevron = () => (
  * the current one. Keyboard: Return, Space or the arrow keys open it; the
  * arrow keys, Home and End move; Return chooses; Escape and Tab close it.
  * The order stays in the address (?sort=new), as before.
+ *
+ * Task F5d: the ticked order is not a link, because it would lead to the page
+ * you are on; choosing it only closes the menu.
  */
 export function SortMenu({ tab, sort, query }: { tab: IdeaStatus; sort: Sort; query: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const button = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
-  const items = useRef<(HTMLAnchorElement | null)[]>([]);
+  const items = useRef<(HTMLElement | null)[]>([]);
   const menuId = useId();
   const CurrentIcon = SORT_ICONS[sort];
 
@@ -90,7 +93,7 @@ export function SortMenu({ tab, sort, query }: { tab: IdeaStatus; sort: Sort; qu
     else if (e.key === "End") focusItem(SORTS.length - 1);
     else if (e.key === "Escape") close(true);
     else if (e.key === "Tab") return setOpen(false);
-    else if (e.key === " " && at >= 0) items.current[at]?.click();
+    else if ((e.key === " " || e.key === "Enter") && at >= 0) items.current[at]?.click();
     else return;
     e.preventDefault();
   };
@@ -116,28 +119,44 @@ export function SortMenu({ tab, sort, query }: { tab: IdeaStatus; sort: Sort; qu
         <div ref={menu} id={menuId} role="menu" aria-label="Sort ideas" className="sort-menu" onKeyDown={onMenuKey}>
           {SORTS.map((s, i) => {
             const ItemIcon = SORT_ICONS[s];
-            return (
+            const checked = s === sort;
+            const content = (
+              <>
+                <ItemIcon />
+                <span className="sort-item-label">{SORT_LABELS[s]}</span>
+                <span className="sort-tick">{checked && <Tick />}</span>
+              </>
+            );
+            const common = {
+              ref: (el: HTMLElement | null) => {
+                items.current[i] = el;
+              },
+              role: "menuitemradio",
+              "aria-checked": checked,
+              tabIndex: -1,
+              className: "sort-item",
+            } as const;
+            const choose = () => {
+              setOpen(false);
+              button.current?.focus();
+              if (!checked) router.replace(boardHref({ tab, sort: s, q: query }), { scroll: false });
+            };
+            return checked ? (
+              <div key={s} {...common} onClick={choose}>
+                {content}
+              </div>
+            ) : (
               <Link
                 key={s}
-                ref={(el) => {
-                  items.current[i] = el;
-                }}
+                {...common}
                 href={boardHref({ tab, sort: s, q: query })}
-                role="menuitemradio"
-                aria-checked={s === sort}
-                tabIndex={-1}
-                className="sort-item"
                 scroll={false}
                 onClick={(e) => {
                   e.preventDefault();
-                  setOpen(false);
-                  button.current?.focus();
-                  if (s !== sort) router.replace(boardHref({ tab, sort: s, q: query }), { scroll: false });
+                  choose();
                 }}
               >
-                <ItemIcon />
-                <span className="sort-item-label">{SORT_LABELS[s]}</span>
-                <span className="sort-tick">{s === sort && <Tick />}</span>
+                {content}
               </Link>
             );
           })}
