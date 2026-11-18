@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, permanentRedirect } from "next/navigation";
-import { boardHref, can, canSeeIdea, canVoteOn, formatComments, formatDate, formatMonthDay, paragraphs } from "@/lib/feedbox";
+import { boardHref, can, canSeeIdea, canVoteOn, formatComments, paragraphs } from "@/lib/feedbox";
+import { LocalDate } from "@/components/LocalDate";
 import { StatusChip } from "@/components/StatusChip";
 import { VoteButton } from "@/components/VoteButton";
 import { getBoard, getComments, getDisplayNames, getIdea, getMyVotes, getViewer } from "@/lib/supabase/data";
@@ -50,7 +51,7 @@ export default async function IdeaPage({ params }: { params: Promise<{ id: strin
             {idea.hiddenAt && <span className="chip chip-hidden">Hidden</span>}
           </div>
           <p className="idea-byline">
-            Posted by {names.get(idea.authorId) ?? "someone"} on {formatDate(idea.createdAt)}
+            Posted by {names.get(idea.authorId) ?? "someone"} on <LocalDate value={idea.createdAt} />
           </p>
           {body.length > 0 && (
             <div className="idea-body">
@@ -72,9 +73,7 @@ export default async function IdeaPage({ params }: { params: Promise<{ id: strin
                   {c.byOwner && <span className="owner-badge">Owner</span>}
                   {c.hidden && <span className="owner-badge">Hidden</span>}
                   <span className="comment-date">
-                    <time dateTime={c.createdAt} title={formatDate(c.createdAt)}>
-                      {formatMonthDay(c.createdAt)}
-                    </time>
+                    <LocalDate value={c.createdAt} short />
                   </span>
                 </div>
                 <p>{c.body}</p>

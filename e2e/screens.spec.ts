@@ -3,10 +3,27 @@
 // with similar ideas, vote twice gives one vote, unvote, comment, and the
 // rate-limit message. Every change is undone by removing the test people.
 import { expect, test, type Page } from "@playwright/test";
-import { admin, apiAs, boardId, ideaId, people, signIn, userId, viewerState, voteCount } from "./helpers";
+import { admin, apiAs, boardId, ideaId, people, sb, signIn, userId, viewerState, voteCount } from "./helpers";
 
 const who = people("screens");
 test.afterAll(() => who.cleanUp());
+
+// Task F5b: the browser never calls Supabase itself. Every read and write goes
+// through the app's server, the path that also works on the hosted Preview
+// (F5's similar ideas, asked from the browser, showed nothing there). Here the
+// browser cannot reach the local Supabase API at all, and any attempt fails
+// the test.
+const browserCalls: string[] = [];
+test.beforeEach(async ({ context }) => {
+  browserCalls.length = 0;
+  await context.route(`${sb.apiUrl}/**`, (route) => {
+    browserCalls.push(route.request().url());
+    return route.abort();
+  });
+});
+test.afterEach(() => {
+  expect(browserCalls, "requests from the browser straight to Supabase").toEqual([]);
+});
 
 const rows = (page: Page) => page.getByTestId("idea-row");
 const titles = (page: Page) => rows(page).locator(".idea-title");
@@ -112,6 +129,15 @@ test("signed in: post with similar ideas, vote twice gives one vote, unvote, com
   const syncCard = similar.getByTestId("similar-idea").filter({ hasText: "Sync between two laptops" });
   await expect(syncCard).toContainText("73");
   await expect(syncCard.locator(".chip")).toHaveText("Open");
+
+  // Return in Title does not post (task F5b): it moves on to Details, and the similar ideas stay.
+  await page.getByLabel("Title").press("Enter");
+  await expect(page.getByLabel("Details")).toBeFocused();
+  await page.waitForTimeout(1000);
+  await expect(page).toHaveURL(/\/ideas\/new$/);
+  await expect(syncCard).toBeVisible();
+  const posted = await admin.from("ideas").select("id", { count: "exact", head: true }).eq("author_id", await userId(email));
+  expect(posted.count, "ideas posted by pressing Return in Title").toBe(0);
 
   // Each similar idea has its own Vote button.
   await syncCard.getByRole("button", { name: "Vote for Sync between two laptops" }).click();
@@ -229,4 +255,36 @@ test("the header shows the owner, and owners see the Owner mark on comments", as
   await page.getByRole("button", { name: "Sign out" }).click();
   await page.goto(`/ideas/${await ideaId("Dark mode for the editor")}`);
   await expect(page.locator(".owner-badge")).toHaveCount(0);
+});
+
+test("dates are shown in the viewer's own time zone: an evening post in California (task F5b)", async ({ browser, baseURL }) => {
+  const email = who.email("dates");
+  await apiAs(email, baseURL!); // creates the person
+  const me = await userId(email);
+  await admin.from("profiles").update({ display_name: "E2E Dates" }).eq("id", me).throwOnError();
+  // Posted at 5:04 PM on Nov 17, 2026, Pacific time: already 01:04 on Nov 18 in UTC.
+  const at = "2026-11-18T01:04:00Z";
+  const { data: idea } = await admin
+    .from("ideas")
+    .insert({ board_id: await boardId(), author_id: me, title: "E2E evening idea" })
+    .select("id")
+    .single()
+    .throwOnError();
+  await admin.from("ideas").update({ created_at: at }).eq("id", idea!.id).throwOnError();
+  await admin.from("comments").insert({ idea_id: idea!.id, author_id: me, body: "E2E evening comment" }).throwOnError();
+  await admin.from("comments").update({ created_at: at }).eq("idea_id", idea!.id).throwOnError();
+
+  for (const [timezoneId, date, monthDay] of [
+    ["America/Los_Angeles", "Nov 17, 2026", "Nov 17"],
+    ["Europe/Berlin", "Nov 18, 2026", "Nov 18"],
+  ] as const) {
+    const context = await browser.newContext({ baseURL, timezoneId });
+    const page = await context.newPage();
+    await page.goto(`/ideas/${idea!.id}`);
+    await expect(page.locator(".idea-byline"), timezoneId).toHaveText(`Posted by E2E Dates on ${date}`);
+    const time = page.getByTestId("comment").locator("time");
+    await expect(time, timezoneId).toHaveText(monthDay);
+    await expect(time, timezoneId).toHaveAttribute("title", date);
+    await context.close();
+  }
 });

@@ -49,15 +49,6 @@ export function boardInitial(name: string): string {
   return first ? first.toUpperCase() : "F";
 }
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
-
-/** "Oct 9", as the comments show their date (Idea.dc.html). UTC, like formatDate. */
-export function formatMonthDay(value: string): string {
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) throw new Error(`Not a date: ${value}`);
-  return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`;
-}
-
 /** An idea's details as paragraphs: split at empty lines, single line breaks kept inside a paragraph. */
 export function paragraphs(body: string): string[] {
   return body

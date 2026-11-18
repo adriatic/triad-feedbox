@@ -1,14 +1,15 @@
 "use client";
 import { useCallback, useReducer, useRef, useState } from "react";
-import { initialVoteButton, isDuplicateVote, refusalMessage, voteReducer, type VoteState } from "@/lib/feedbox";
-import { createClient } from "@/lib/supabase/browser";
+import { initialVoteButton, voteReducer, type VoteState } from "@/lib/feedbox";
+import { vote } from "./vote-action";
 
 /**
  * Vote and unvote without a page reload (F1 section 3). The click shows at
- * once; the database is the authority. A second vote by the same person is
- * refused by the primary key on votes (and ignored here), so a double click
- * or a second tab never counts twice. After each change the count and the
- * person's own vote are read back from the database.
+ * once; the database is the authority. The vote is sent through a server
+ * action (task F5b: the browser never calls Supabase itself), which reads the
+ * count and the person's own vote back after each change. A second vote by
+ * the same person is refused by the primary key on votes (and ignored), so a
+ * double click or a second tab never counts twice.
  */
 export function useVote(ideaId: number, initial: VoteState) {
   const [button, dispatch] = useReducer(voteReducer, initial, initialVoteButton);
@@ -20,32 +21,18 @@ export function useVote(ideaId: number, initial: VoteState) {
     async (want: boolean) => {
       dispatch({ type: "click" });
       setError(null);
-      const supabase = createClient();
-      const { data: auth } = await supabase.auth.getUser();
-      const userId = auth.user?.id;
-      if (!userId) {
+      let result;
+      try {
+        result = await vote(ideaId, want);
+      } catch {
+        result = { ok: false as const, message: "Feedbox could not be reached. Check the connection and try again." };
+      }
+      if (!result.ok) {
         dispatch({ type: "failed" });
-        setError("Your session has ended. Sign in again to vote.");
+        setError(result.message);
         return;
       }
-      const { error: writeError } = want
-        ? await supabase.from("votes").insert({ idea_id: ideaId })
-        : await supabase.from("votes").delete().eq("idea_id", ideaId).eq("user_id", userId);
-      if (writeError && !isDuplicateVote(writeError)) {
-        dispatch({ type: "failed" });
-        setError(refusalMessage(writeError, want ? "Voting" : "Removing your vote"));
-        return;
-      }
-      const [{ data: idea }, { data: mine }] = await Promise.all([
-        supabase.from("ideas").select("vote_count").eq("id", ideaId).maybeSingle(),
-        supabase.from("votes").select("idea_id").eq("idea_id", ideaId).eq("user_id", userId).maybeSingle(),
-      ]);
-      if (!idea) {
-        dispatch({ type: "failed" });
-        setError("This idea is no longer on the board.");
-        return;
-      }
-      dispatch({ type: "confirmed", state: { voted: mine !== null, count: idea.vote_count } });
+      dispatch({ type: "confirmed", state: { voted: result.voted, count: result.count } });
     },
     [ideaId],
   );

@@ -18,7 +18,9 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: 0,
   reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
-  use: { baseURL, trace: "retain-on-failure" },
+  // Dates are shown in the viewer's own time zone (task F5b). The tests and the
+  // screenshots use Pacific time, Nik's, on the Mac and on the CI runner alike.
+  use: { baseURL, trace: "retain-on-failure", timezoneId: "America/Los_Angeles" },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
     command: `npm run build && npx next start -H 127.0.0.1 -p ${PORT}`,

@@ -1,7 +1,7 @@
 "use server";
 import { redirect } from "next/navigation";
 import { refusalMessage, validateBody, validateTitle } from "@/lib/feedbox";
-import { getBoard } from "@/lib/supabase/data";
+import { getBoard, getSimilarIdeas, getViewer, type SimilarIdea } from "@/lib/supabase/data";
 import { createClient } from "@/lib/supabase/server";
 
 export type PostIdeaState = { status: "idle" } | { status: "error"; message: string; title: string; body: string };
@@ -33,4 +33,23 @@ export async function postIdea(_prev: PostIdeaState, form: FormData): Promise<Po
     .single();
   if (error) return back(refusalMessage(error, "Posting your idea"));
   redirect(`/ideas/${data.id}`);
+}
+
+export type SimilarState = { ok: true; query: string; ideas: SimilarIdea[] } | { ok: false; query: string; message: string };
+
+/**
+ * The similar ideas beside the form (F1 section 5), asked 300 ms after the
+ * last keystroke. Task F5b: asked on the server, like the board's search box,
+ * and a failure is shown in words instead of an empty list.
+ */
+export async function findSimilar(query: string): Promise<SimilarState> {
+  try {
+    const board = await getBoard();
+    if (!board) return { ok: false, query, message: "This board does not exist." };
+    const viewer = await getViewer(board.id);
+    return { ok: true, query, ideas: await getSimilarIdeas(board.id, viewer, query) };
+  } catch (e) {
+    console.error(e);
+    return { ok: false, query, message: "Similar ideas could not be loaded just now. Check the ideas on the board before posting." };
+  }
 }

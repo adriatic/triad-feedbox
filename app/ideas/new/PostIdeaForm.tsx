@@ -1,65 +1,61 @@
 "use client";
 import Link from "next/link";
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import {
   formatNumber,
   isSearchable,
   LIMITS,
   searchText,
   SIMILAR_DEBOUNCE_MS,
-  SIMILAR_LIMIT,
   similarHeading,
-  type IdeaStatus,
 } from "@/lib/feedbox";
 import { StatusChip } from "@/components/StatusChip";
 import { useVote } from "@/components/useVote";
-import { createClient } from "@/lib/supabase/browser";
-import { postIdea, type PostIdeaState } from "./actions";
-
-interface Similar {
-  id: number;
-  title: string;
-  status: IdeaStatus;
-  voteCount: number;
-  voted: boolean;
-}
+import type { SimilarIdea as Similar } from "@/lib/supabase/data";
+import { findSimilar, postIdea, type PostIdeaState } from "./actions";
 
 /**
  * Post an idea (PostIdea.dc.html): the form, and beside it the similar ideas
  * already on the board, asked from similar_ideas 300 ms after the last
  * keystroke once the title has 3 or more characters (F1 section 5). Each has
  * its own Vote button, so voting for an existing idea is one click.
+ * Task F5b: the list is asked through a server action, and Return in Title
+ * moves to Details instead of posting, so the similar ideas are seen first.
  */
-export function PostIdeaForm({ boardId }: { boardId: string }) {
+export function PostIdeaForm() {
   const [state, action, pending] = useActionState<PostIdeaState, FormData>(postIdea, { status: "idle" });
   const [title, setTitle] = useState(state.status === "error" ? state.title : "");
   const [similar, setSimilar] = useState<Similar[]>([]);
   const [searchedFor, setSearchedFor] = useState("");
+  const [lookupError, setLookupError] = useState<string | null>(null);
+  const details = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     const text = searchText(title);
     if (!isSearchable(text)) return;
     let cancelled = false;
     const timer = setTimeout(async () => {
-      const supabase = createClient();
-      const { data, error } = await supabase.rpc("similar_ideas", { p_board_id: boardId, p_query: text, p_limit: SIMILAR_LIMIT });
-      if (cancelled || error) return;
-      const ids = data.map((r) => r.id);
-      const { data: auth } = await supabase.auth.getUser();
-      const mine =
-        auth.user && ids.length
-          ? ((await supabase.from("votes").select("idea_id").eq("user_id", auth.user.id).in("idea_id", ids)).data ?? [])
-          : [];
+      let result;
+      try {
+        result = await findSimilar(text);
+      } catch {
+        result = { ok: false as const, query: text, message: "Feedbox could not be reached. Check the connection and try again." };
+      }
       if (cancelled) return;
-      const voted = new Set(mine.map((v) => v.idea_id));
-      setSimilar(data.map((r) => ({ id: r.id, title: r.title, status: r.status, voteCount: r.vote_count, voted: voted.has(r.id) })));
-      setSearchedFor(text);
+      if (!result.ok) {
+        setSimilar([]);
+        setLookupError(result.message);
+        return;
+      }
+      setLookupError(null);
+      setSimilar(result.ideas);
+      setSearchedFor(result.query);
     }, SIMILAR_DEBOUNCE_MS);
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [title, boardId]);
+  }, [title]);
 
   // Fewer than 3 characters: no list (what was found for an earlier title is not shown).
   const shown = isSearchable(title) ? similar : [];
@@ -80,6 +76,13 @@ export function PostIdeaForm({ boardId }: { boardId: string }) {
             className="input"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
+            onKeyDown={(e) => {
+              // Return in Title does not post (task F5b): it moves on to Details.
+              if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                details.current?.focus();
+              }
+            }}
           />
           <span className="hint">Check the ideas on the right first. Voting on an existing idea helps it more than a duplicate.</span>
         </div>
@@ -88,6 +91,7 @@ export function PostIdeaForm({ boardId }: { boardId: string }) {
           <textarea
             id="idea-body"
             name="body"
+            ref={details}
             rows={6}
             maxLength={LIMITS.bodyMax}
             placeholder="What are you trying to do, and what gets in the way?"
@@ -111,6 +115,11 @@ export function PostIdeaForm({ boardId }: { boardId: string }) {
       </form>
       <aside aria-label="Similar ideas" className="similar" aria-live="polite">
         <h2>{similarHeading(shown.length ? searchedFor : searchText(title), shown.length)}</h2>
+        {lookupError && isSearchable(title) && (
+          <p className="alert" role="alert">
+            {lookupError}
+          </p>
+        )}
         {shown.length > 0 && (
           <ul className="similar-list" data-testid="similar-list">
             {shown.map((s) => (

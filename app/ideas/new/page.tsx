@@ -21,7 +21,7 @@ export default async function NewIdeaPage() {
         &larr; All ideas
       </Link>
       <h1 className="page-title">Post an idea</h1>
-      <PostIdeaForm boardId={board.id} />
+      <PostIdeaForm />
     </main>
   );
 }

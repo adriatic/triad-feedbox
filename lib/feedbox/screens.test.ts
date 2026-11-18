@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   boardHref,
   boardInitial,
-  formatMonthDay,
   isDuplicateVote,
   isRateLimited,
   isSearchable,
@@ -56,12 +55,6 @@ describe("small formats", () => {
     expect(boardInitial("Lumen")).toBe("L");
     expect(boardInitial(" feedbox")).toBe("F");
     expect(boardInitial("")).toBe("F");
-  });
-
-  it("shows a comment date as month and day, in UTC", () => {
-    expect(formatMonthDay("2026-10-09T10:00:00Z")).toBe("Oct 9");
-    expect(formatMonthDay("2026-12-31T23:30:00-02:00")).toBe("Jan 1");
-    expect(() => formatMonthDay("not a date")).toThrow("Not a date");
   });
 
   it("splits details into paragraphs at empty lines", () => {

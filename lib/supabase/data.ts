@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { isSearchable, SEARCH_LIMIT, searchText, type ChangelogEntry, type ChangelogItem, type Idea, type Role, type Viewer } from "@/lib/feedbox";
+import { isDuplicateVote, isSearchable, refusalMessage, SEARCH_LIMIT, SIMILAR_LIMIT, searchText, type ChangelogEntry, type ChangelogItem, type Idea, type Role, type Viewer } from "@/lib/feedbox";
 import { boardSlug } from "./env";
 import { createClient } from "./server";
 
@@ -178,6 +178,62 @@ export async function searchIdeaIds(boardId: string, query: string): Promise<num
   });
   if (error) throw new Error(`Could not search the ideas: ${error.message}`);
   return data.map((r) => r.id);
+}
+
+export interface SimilarIdea {
+  id: number;
+  title: string;
+  status: Idea["status"];
+  voteCount: number;
+  voted: boolean;
+}
+
+/**
+ * Post an idea's similar ideas (F1 section 5): similar_ideas on titles, at
+ * most 5, best first, each with whether the viewer has voted for it. Asked
+ * on the server (task F5b), like the board's search box.
+ */
+export async function getSimilarIdeas(boardId: string, viewer: ViewerInfo, query: string): Promise<SimilarIdea[]> {
+  if (!isSearchable(query)) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("similar_ideas", {
+    p_board_id: boardId,
+    p_query: searchText(query),
+    p_limit: SIMILAR_LIMIT,
+    p_include_body: false,
+  });
+  if (error) throw new Error(`Could not look for similar ideas: ${error.message}`);
+  const mine = await getMyVotes(viewer, data.map((r) => r.id));
+  return data.map((r) => ({ id: r.id, title: r.title, status: r.status, voteCount: r.vote_count, voted: mine.has(r.id) }));
+}
+
+export type VoteResult = { ok: true; voted: boolean; count: number } | { ok: false; message: string };
+
+/**
+ * Vote for an idea, or take the vote back, as the signed-in person; then read
+ * the count and the person's own vote back from the database, which is the
+ * authority. A second vote is refused by the primary key on votes (23505) and
+ * ignored, so a double click or a second tab never counts twice.
+ */
+export async function setMyVote(ideaId: number, want: boolean): Promise<VoteResult> {
+  if (!Number.isSafeInteger(ideaId) || ideaId <= 0) return { ok: false, message: "This idea is no longer on the board." };
+  const supabase = await createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  const userId = auth.user?.id;
+  if (!userId) return { ok: false, message: "Your session has ended. Sign in again to vote." };
+  const { error: writeError } = want
+    ? await supabase.from("votes").insert({ idea_id: ideaId })
+    : await supabase.from("votes").delete().eq("idea_id", ideaId).eq("user_id", userId);
+  if (writeError && !isDuplicateVote(writeError)) {
+    return { ok: false, message: refusalMessage(writeError, want ? "Voting" : "Removing your vote") };
+  }
+  const [{ data: idea, error: ideaError }, { data: mine, error: mineError }] = await Promise.all([
+    supabase.from("ideas").select("vote_count").eq("id", ideaId).maybeSingle(),
+    supabase.from("votes").select("idea_id").eq("idea_id", ideaId).eq("user_id", userId).maybeSingle(),
+  ]);
+  if (ideaError || mineError) return { ok: false, message: "Your vote was sent, but the new count could not be read. Reload the page." };
+  if (!idea) return { ok: false, message: "This idea is no longer on the board." };
+  return { ok: true, voted: mine !== null, count: idea.vote_count };
 }
 
 /** Display names by person (profiles never hold an email address). */
