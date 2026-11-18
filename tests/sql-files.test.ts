@@ -25,6 +25,10 @@ describe("pasted SQL files", () => {
       "supabase/checks/prod-board.sql",
       "supabase/production/owner-nik.sql",
       "supabase/checks/prod-owner.sql",
+      "supabase/apply/preview-board-owner-ids.sql",
+      "supabase/apply/prod-board-owner-ids.sql",
+      "supabase/checks/preview-board-owner-ids.sql",
+      "supabase/checks/prod-board-owner-ids.sql",
     ]));
   });
 
@@ -70,5 +74,43 @@ describe("the Feedbox v1 migration", () => {
     const text = read("supabase/migrations/20261113000000_feedbox_v1.sql");
     expect(createHash("sha256").update(text).digest("hex"))
       .toBe("25077cb5974b0810601816af39297a082cdd5b97a350e842a9832970d6795384");
+  });
+});
+
+describe("the O2 migration (board_owner_ids, decision F5-D1)", () => {
+  const path = "supabase/migrations/20261118000000_board_owner_ids.sql";
+  const migration = read(path);
+  // The statements: everything after the leading comment lines.
+  const statements = migration.split("\n");
+  const first = statements.findIndex((l) => l !== "" && !l.startsWith("--"));
+  const body = statements.slice(first).join("\n").trimEnd();
+
+  it("is exactly the reviewed file (task O2), never edited after it has run on feedbox-preview", () => {
+    expect(createHash("sha256").update(migration).digest("hex"))
+      .toBe("e5b84fb52cea9182e085778f421ced8ec956e7d8dfe755d4be73ca81828cfa52");
+  });
+
+  it.each(["preview", "prod"])("supabase/apply/%s-board-owner-ids.sql runs the migration's statements word for word", (project) => {
+    const pasted = read(`supabase/apply/${project}-board-owner-ids.sql`);
+    const between = pasted.match(/-- migration:begin\n([\s\S]*?)\n-- migration:end/)?.[1];
+    expect(between).toBe(body);
+  });
+
+  it.each(["preview", "prod"])("supabase/apply/%s-board-owner-ids.sql uses the fingerprint block of the checks word for word", (project) => {
+    const shared = read("supabase/checks/prod-board.sql").match(/-- shared:fingerprint:begin[\s\S]*?-- shared:fingerprint:end/)?.[0];
+    expect(shared).toBeDefined();
+    expect(read(`supabase/apply/${project}-board-owner-ids.sql`)).toContain(shared!);
+  });
+
+  it.each([
+    ["supabase/apply/preview-board-owner-ids.sql", "supabase/apply/prod-board-owner-ids.sql"],
+    ["supabase/checks/preview-board-owner-ids.sql", "supabase/checks/prod-board-owner-ids.sql"],
+  ])("%s and %s differ only in the project they are for", (preview, prod) => {
+    const strip = (text: string) => text
+      .split("\n").slice(1).join("\n")  // the header line names the file and its line count
+      .replaceAll("feedbox-preview", "PROJECT").replaceAll("feedbox-prod", "PROJECT")
+      .replaceAll("preview-board-owner-ids", "FILE").replaceAll("prod-board-owner-ids", "FILE")
+      .replace(/^-- Run once[\s\S]*?\n--\n/m, "");
+    expect(strip(read(prod))).toBe(strip(read(preview)));
   });
 });

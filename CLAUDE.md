@@ -203,6 +203,6 @@ One key per project, so either can be revoked without touching the other.
 - `screenshots/F5/`: the F5 screenshots, `<state>-<light|dark>-<1280|390>.png`
 - `lib/feedbox/`: core library. Pure TypeScript with **no** Supabase or Next imports; unit tests sit beside the code as `*.test.ts`
 - `design/`: design brief and the six screen sources (part of the app's definition)
-- `supabase/`: `config.toml` (local only), `migrations/`, `seed.sql`, `production/`, `checks/` (read-only check scripts), `marker/` (project markers), `tests/`, `templates/`
+- `supabase/`: `config.toml` (local only), `migrations/`, `seed.sql`, `production/`, `apply/` (a migration as Nik pastes it, guarded by the project marker: `<project>-<topic>.sql`, task O2; `tests/sql-files.test.ts` keeps its statements identical to the migration file), `checks/` (read-only check scripts), `marker/` (project markers), `tests/`, `templates/`
 - `scripts/`: `sql-files.ts` (header lines of pasted SQL), `test-sql-checks.sh` (tests of check and changing scripts) and `triad-ready.sh` (is TRIAD ready on the Mac); `tests/`: repository-level unit tests (`tests/sql-files.test.ts`, `tests/triad-ready.test.ts`, `tests/email-templates.test.ts`)
 - Later tasks add `TRIAD.md` and `templates/` (at the root)

@@ -371,20 +371,35 @@ test("the rate limits are explained in words (F1 section 6)", async ({ page, bas
   await expect(voteIn(page, "Tag notes by colour")).toHaveAttribute("aria-pressed", "false");
 });
 
-test("the header shows the owner, and owners see the Owner mark on comments", async ({ page, baseURL }) => {
+test("everyone sees the Owner mark on an owner's comment: owner, member and visitor (task O2, decision F5-D1)", async ({ page, baseURL }) => {
+  const dark = async () => `/ideas/${await ideaId("Dark mode for the editor")}`;
+  const ana = () => page.getByTestId("comment").filter({ hasText: "Ana" }).locator(".owner-badge");
+  const tom = () => page.getByTestId("comment").filter({ hasText: "Tom R." }).locator(".owner-badge");
+
+  // An owner of the board.
   const email = who.email("owner");
   await signIn(page, baseURL!, email, "E2E Owner");
   await admin.from("board_owners").insert({ board_id: await boardId(), user_id: await userId(email) }).throwOnError();
-  await page.goto(`/ideas/${await ideaId("Dark mode for the editor")}`);
+  await page.goto(await dark());
   await expect(viewerState(page)).toHaveText("Signed in as owner");
-  await expect(page.getByTestId("comment").filter({ hasText: "Ana" }).locator(".owner-badge")).toHaveText("Owner");
-  await expect(page.getByTestId("comment").filter({ hasText: "Tom R." }).locator(".owner-badge")).toHaveCount(0);
-  await admin.from("board_owners").delete().eq("user_id", await userId(email)).throwOnError();
+  await expect(ana()).toHaveText("Owner");
+  await expect(tom()).toHaveCount(0);
 
-  // Until decision F5-D1, the database does not tell anyone else who the owners are.
+  // The same person as a member (no longer an owner): the database still tells them who the owners are.
+  await admin.from("board_owners").delete().eq("user_id", await userId(email)).throwOnError();
+  await page.goto(await dark());
+  await expect(viewerState(page)).toHaveText("Signed in as E2E Owner");
+  await expect(ana()).toHaveText("Owner");
+  await expect(tom()).toHaveCount(0);
+  await expect(page.locator(".owner-badge")).toHaveCount(1);
+
+  // A visitor (signed out).
   await page.getByRole("button", { name: "Sign out" }).click();
-  await page.goto(`/ideas/${await ideaId("Dark mode for the editor")}`);
-  await expect(page.locator(".owner-badge")).toHaveCount(0);
+  await page.goto(await dark());
+  await expect(viewerState(page)).toHaveText("Viewing as visitor");
+  await expect(ana()).toHaveText("Owner");
+  await expect(tom()).toHaveCount(0);
+  await expect(page.locator(".owner-badge")).toHaveCount(1);
 });
 
 test("dates are shown in the viewer's own time zone: an evening post in California (task F5b)", async ({ browser, baseURL }) => {

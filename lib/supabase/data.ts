@@ -107,7 +107,7 @@ export async function getIdea(boardId: string, id: number): Promise<Idea | null>
 export interface CommentView {
   id: number;
   authorName: string;
-  /** True when the author owns the board and the viewer may know it (see getOwnerIds). */
+  /** True when the author owns the board (see getOwnerIds; shown to every viewer since O2). */
   byOwner: boolean;
   body: string;
   createdAt: string;
@@ -136,18 +136,28 @@ export async function getComments(boardId: string, ideaId: number): Promise<Comm
 }
 
 /**
- * The board's owners, as far as row-level security lets this viewer see them:
- * an owner sees every owner of the board, anyone else sees at most themselves,
- * and a visitor sees none. So the "Owner" mark on comments shows only for owners
- * until the database lets everyone read who the owners are (F5 report, decision F5-D1).
+ * The user ids of the board's owners, for every viewer, visitors included
+ * (decision F5-D1, task O2), so the "Owner" mark on comments shows for everyone.
+ * Read through the database function board_owner_ids, which returns ids only;
+ * the table board_owners stays closed (an owner sees its rows, anyone else at
+ * most their own).
+ *
+ * The mark is not essential to the page. If the read fails, for example because
+ * a project does not have the function yet (its migration has not run there),
+ * the page still loads and shows no mark, and the reason goes to the server log.
  */
 export async function getOwnerIds(boardId: string): Promise<Set<string>> {
   const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return new Set();
-  const { data, error } = await supabase.from("board_owners").select("user_id").eq("board_id", boardId);
-  if (error) throw new Error(`Could not read the owners: ${error.message}`);
-  return new Set(data.map((o) => o.user_id));
+  const { data, error } = await supabase.rpc("board_owner_ids", { p_board_id: boardId });
+  if (error) {
+    console.error(
+      `Feedbox: no Owner mark on comments, because the board's owners could not be read ` +
+      `(board_owner_ids: ${error.code ?? "no code"} ${error.message}). ` +
+      `Has the migration 20261118000000_board_owner_ids.sql run in this project?`,
+    );
+    return new Set();
+  }
+  return new Set(data ?? []);
 }
 
 /** The ideas this viewer has voted for (votes are readable by their own person only). */

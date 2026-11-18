@@ -8,8 +8,8 @@
 # one transaction. "Pasted twice" means the file's text twice in one query.
 #
 # It walks the database through the real states (Lumen preview, empty prod,
-# prod after the migration, prod with its board, prod with Nik as its owner),
-# runs every check where it
+# prod after the migration, prod with its board, prod with Nik as its owner,
+# then the O2 migration on prod and on preview), runs every check where it
 # should PASS and where it should FAIL, and every changing script where it
 # should refuse, and confirms that a refusal changed nothing.
 # It resets the local database at the start and at the end.
@@ -91,6 +91,9 @@ expect_success() {
 }
 
 reset() { npx supabase db reset "$@" >/dev/null 2>&1 || { echo "db reset failed"; exit 1; }; }
+# The states before task O2 have only the Feedbox v1 migration.
+V1=20261113000000
+reset_v1() { reset --version "$V1" "$@"; }
 
 # person <name>: one signed-up person, the way Supabase Auth adds one (the
 # trigger on auth.users creates the profile, with no display name yet).
@@ -104,9 +107,11 @@ person() {
     '', '', '', '', '', '', '', '')"
 }
 OWNER=supabase/production/owner-nik.sql
+APPLY_PREVIEW=supabase/apply/preview-board-owner-ids.sql
+APPLY_PROD=supabase/apply/prod-board-owner-ids.sql
 
-echo "== A. Local database with the Lumen seed (marker: local)"
-reset
+echo "== A. Local database with the Lumen seed (marker: local), Feedbox v1 migration only"
+reset_v1
 expect_check preview-seed FAIL
 echo "   Marking it as feedbox-preview (test only), so it looks like feedbox-preview tonight:"
 sql "update triad.project set name = 'feedbox-preview'" >/dev/null
@@ -128,7 +133,7 @@ expect_check prod-owner FAIL
 expect_refusal "owner script in preview" "$(cat $OWNER)" "marked feedbox-preview"
 
 echo "== B. An empty project, like feedbox-prod tonight (migration undone, no marker)"
-reset --no-seed
+reset_v1 --no-seed
 expect_success "undo on the empty migration" "$(cat supabase/production/undo-feedbox-v1.sql)"
 expect_check prod-before-migration FAIL
 expect_refusal "marker feedbox-preview in prod" "$(cat supabase/marker/feedbox-preview.sql)" "no Feedbox tables"
@@ -198,6 +203,52 @@ expect_check prod-owner FAIL "update triad.project set name = 'feedbox-preview'"
 expect_check prod-owner FAIL "grant insert on public.ideas to anon"
 expect_check prod-board PASS
 expect_refusal "owner script again" "$(cat $OWNER)" "already an owner"
+
+echo "== G. feedbox-prod with Nik as owner: the O2 migration (board_owner_ids)"
+expect_check prod-board-owner-ids FAIL
+expect_refusal "O2 preview script in prod" "$(cat $APPLY_PREVIEW)" "only for feedbox-preview"
+expect_refusal "O2 prod script, migration changed" "grant insert on public.ideas to anon; $(cat $APPLY_PROD)" "does not match the reviewed Feedbox v1 migration"
+expect_refusal "O2 prod script, no Feedbox tables" "drop table public.changelog_items, public.changelog_entries, public.comments, public.votes, public.ideas, public.board_owners, public.profiles, public.boards cascade; $(cat $APPLY_PROD)" "not applied"
+expect_refusal "O2 prod script pasted twice" "$(twice $APPLY_PROD)" "pasted twice into one query. Nothing was changed: the whole query is undone"
+expect_check prod-owner PASS
+expect_success "O2 prod script" "$(cat $APPLY_PROD)"
+expect_check prod-board-owner-ids PASS
+expect_check preview-board-owner-ids FAIL
+expect_check prod-board-owner-ids FAIL "update triad.project set name = 'feedbox-preview'"
+expect_check prod-board-owner-ids FAIL "grant execute on function public.board_owner_ids(uuid) to public"
+expect_check prod-board-owner-ids FAIL "revoke execute on function public.board_owner_ids(uuid) from anon"
+expect_check prod-board-owner-ids FAIL "alter function public.board_owner_ids(uuid) reset search_path"
+expect_check prod-board-owner-ids FAIL "alter function public.board_owner_ids(uuid) security invoker"
+expect_check prod-board-owner-ids FAIL "delete from public.board_owners"
+expect_check prod-board-owner-ids FAIL "create or replace function public.board_owner_ids(p_board_id uuid) returns setof uuid language sql stable security definer set search_path = '' as \$f\$ select o.user_id from public.board_owners o \$f\$"
+expect_check prod-board-owner-ids FAIL "grant insert on public.ideas to anon"
+expect_check prod-board-owner-ids FAIL "drop function public.board_owner_ids(uuid)"
+expect_refusal "O2 prod script again" "$(cat $APPLY_PROD)" "already exists"
+expect_refusal "O2 prod script, function dropped and project marked feedbox-preview" "drop function public.board_owner_ids(uuid); update triad.project set name = 'feedbox-preview'; $(cat $APPLY_PROD)" "only for feedbox-prod"
+expect_check prod-board-owner-ids PASS
+
+echo "== H. feedbox-preview (Lumen) before and after the O2 migration"
+reset_v1
+sql "update triad.project set name = 'feedbox-preview'" >/dev/null
+expect_check preview-seed PASS
+expect_check preview-board-owner-ids FAIL
+expect_refusal "O2 prod script in preview" "$(cat $APPLY_PROD)" "only for feedbox-prod"
+expect_refusal "O2 preview script pasted twice" "$(twice $APPLY_PREVIEW)" "pasted twice into one query. Nothing was changed: the whole query is undone"
+expect_success "O2 preview script" "$(cat $APPLY_PREVIEW)"
+expect_check preview-board-owner-ids PASS
+expect_check prod-board-owner-ids FAIL
+expect_check preview-board-owner-ids FAIL "revoke execute on function public.board_owner_ids(uuid) from authenticated"
+expect_check preview-board-owner-ids FAIL "grant insert on public.ideas to anon"
+expect_refusal "O2 preview script again" "$(cat $APPLY_PREVIEW)" "already exists"
+echo "   After O2 the older checks no longer match (the fingerprint now includes board_owner_ids):"
+expect_check preview-seed FAIL
+
+echo "== I. The local database as supabase db reset builds it (both migrations)"
+reset
+sql "update triad.project set name = 'feedbox-preview'" >/dev/null
+echo "   The migration file gives the same database as the pasted script:"
+expect_check preview-board-owner-ids PASS
+expect_refusal "O2 preview script on the full local database" "$(cat $APPLY_PREVIEW)" "already exists"
 
 echo "== E. Back to the normal local database"
 reset
