@@ -30,7 +30,7 @@ Feedbox is the worked example for an article about TRIAD (Tracker-Recorded, Inde
 5. CI checks (GitHub Actions workflow `CI`): `lint`, `typecheck`, `unit`, `db` (pgTAP tests and `npm run test:checks` on a local Supabase database in Docker on the runner), `e2e` (since F4: Playwright against the app built on the runner and LOCAL Supabase in Docker; a required check since M5). All five, plus Vercel's own status `Vercel`, are required on `main`.
 
 ## Three rules that are never broken
-1. **You never hold a Supabase secret key**: not in a file on the Mac, not in your shell, not in a commit. The preview secret key exists only as the GitHub Actions secret `SUPABASE_PREVIEW_SECRET_KEY`, used only by CI.
+1. **You never hold a Supabase secret key**: not in a file on the Mac, not in your shell, not in a commit. No secret key of a hosted project exists anywhere outside the Supabase dashboard. The three GitHub Actions secrets `SUPABASE_PREVIEW_SECRET_KEY`, `SUPABASE_PREVIEW_PUBLISHABLE_KEY` and `SUPABASE_PREVIEW_URL`, which no workflow ever used, were deleted on 2026-11-18 by Nik's decision A1-D1.
 2. **You never apply a change to a hosted database.** No `supabase login`, no `supabase db push`, no SQL against `feedbox-preview` or `feedbox-prod`. You write the migration; Claude.ai reads it line by line; Nik runs it, first on Preview, then on Production. Local Supabase in Docker (colima) for tests is fine.
 3. **No secrets on the Mac for this project.** No `.env.local` with keys, no Supabase CLI login, no machine-user token. `.gitignore` excludes every `.env*` file.
 
@@ -41,6 +41,8 @@ Supabase projects were created with "Automatically expose new tables" ON and "En
 - Order: decisions Nik must make, then Steps for Nik (complete, numbered), then results, links, check names and commit hashes.
 - Before sending, search the report for unfilled placeholders or missing items and fix them.
 - `cc-reports` is never merged into `main`. Use a separate worktree or `git switch`; never mix report commits into a task branch.
+- **Architecture description (task A1):** every task that changes how the parts connect (a new path, a new service, a key, or a rule in the "never" list) updates `docs/ARCHITECTURE.md` in the same pull request, and its report says so.
+- **Steps check links by clicking (Nik, F5d-3, 2026-11-17):** a step checks what a link does by clicking it, never by Chrome's hover address box, which did not show on Nik's Mac.
 
 ## Commands
 - `npm ci`: install
