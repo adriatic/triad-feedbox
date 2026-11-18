@@ -55,6 +55,7 @@ Supabase projects were created with "Automatically expose new tables" ON and "En
 - `npm run sql:headers`: sets the line count in the header line of every pasted SQL file
 - `npm run e2e:supabase`: the full local Supabase stack (database, auth, API, Mailpit) that the end-to-end tests need; `npm run db:start` starts the database only
 - `npm run test:e2e`: Playwright tests in `e2e/` (builds the app, starts it on http://127.0.0.1:3000 with the LOCAL Supabase keys from `supabase status`, never a hosted project)
+- `npm run screenshots`: Playwright screenshots of every screen and state (light and dark, 1280 and 390 px) into `screenshots/F5/`, against LOCAL Supabase; with `SIDE_BY_SIDE_DIR=<folder>` also one design-beside-screen image per design (the designs are drawn with `e2e/design-support.js`). Not part of `test:e2e` or CI, so the committed images change only when asked for
 - `npm run db:types`: regenerate `lib/supabase/database.types.ts` from the local database (after a migration)
 
 ## Database
@@ -148,7 +149,7 @@ If a Preview address is missing from feedbox-preview's Redirect URLs, Supabase q
 | Email: Email OTP length | 8 digits | 8 digits | Nik, 2026-11-16 9:13 PM |
 | Email: **Email OTP expiration** | `900` seconds | `900` seconds | Nik, 2026-11-16 9:28 PM, after a reload. **Corrected:** it was `3600` in both projects (seen 9:13 PM), not the `900` of Setup step D-9; Nik's decision F4f-D1 set both to `900`, to match "expires in 15 minutes" in both email templates and on the sign-in page |
 | Rate Limits: rate limit for sending emails | `30` per hour | `30` per hour | feedbox-prod: Nik, 2026-11-16 5:31 PM. feedbox-preview: Nik, 2026-11-16 9:13 PM |
-| Rate Limits: minimum interval per user | `60` seconds | `60` seconds | feedbox-preview: Nik, 2026-11-16 9:13 PM. feedbox-prod: Nik, 2026-11-17 8:47 AM (screenshot of the Rate Limits page, opened from feedbox-prod's address; the page itself does not show the project name) |
+| Rate Limits: minimum interval per user | `60` seconds | `60` seconds | feedbox-preview: Nik, 2026-11-16 9:13 PM. feedbox-prod: Nik, 2026-11-17 8:47 AM (screenshot of the Rate Limits page, opened from feedbox-prod's address), and verified on screen by Nik on 2026-11-17 at 8:49 AM (noted in M7) |
 
 #### Local Supabase (`supabase/config.toml`) against these settings
 The local stack mirrors the hosted sign-in settings, except where a difference is on purpose:
@@ -190,13 +191,16 @@ One key per project, so either can be revoked without touching the other.
 - When you add a piece to TRIAD, add its check here, in README.md and in the script, and update the count of checks in all three places and in `tests/triad-ready.test.ts`.
 
 ## Layout
+- **No link to the page you are on** (tasks F5c and F5d): not in the header, the footer, the board's tabs (the current tab is plain text) or the sort menu (the ticked order is not a link). `e2e/screens.spec.ts` checks every page a visitor can open
 - `app/`: Next.js App Router routes: `/`, `/ideas/[id]`, `/ideas/new`, `/changelog`, `/changelog/new`, `/sign-in`, `/auth/confirm`, `/auth/sign-out`, `/welcome`
 - `proxy.ts`: Next.js 16's middleware: refreshes the Supabase session and sends a signed-in person without a display name to `/welcome`
-- `lib/supabase/`: server and browser clients (`@supabase/ssr`, publishable key only), data reads, generated database types
-- `components/`: shared pieces (the header with the sign-in state)
-- `e2e/`: Playwright tests (local Supabase only); `e2e/global-setup.ts` waits until local Supabase sends the Feedbox email templates
+- `lib/supabase/`: the server client (`@supabase/ssr`, publishable key only), data reads and writes, generated database types. **The browser never calls Supabase itself** (task F5b): every read and write goes through a page, a server action or `proxy.ts`, with the person's session cookies. `e2e/screens.spec.ts` blocks the browser from the Supabase API and fails on any attempt
+- `components/`: shared pieces: the header with the sign-in state (on `/changelog` it reads "<board> Changelog" with "Back to the board", task F5c), the footer (`Footer`: no "See what shipped" link on `/changelog`, task F5d), the board's sort menu (`SortMenu`: "Most votes" or "Newest", task F5c), the vote button (`useVote`: votes and unvotes without a reload, through the server action `components/vote-action.ts`; the database is the authority), the status chip, the board's search box, `LocalDate` (a moment shown as the date in the viewer's own time zone, task F5b; a calendar date such as a changelog release is shown as written)
+- `app/globals.css`: the styles, taken from the six designs (colours, light and dark by the system setting, phone layout below 640 px)
+- `e2e/`: Playwright tests (local Supabase only): `auth.spec.ts` (F4, sign-in), `screens.spec.ts` (F5, the screens), `screenshots.spec.ts` (only with `npm run screenshots`); `helpers.ts` (sign in as a test person, tidy up); `e2e/global-setup.ts` waits until local Supabase sends the Feedbox email templates
+- `screenshots/F5/`: the F5 screenshots, `<state>-<light|dark>-<1280|390>.png`
 - `lib/feedbox/`: core library. Pure TypeScript with **no** Supabase or Next imports; unit tests sit beside the code as `*.test.ts`
 - `design/`: design brief and the six screen sources (part of the app's definition)
 - `supabase/`: `config.toml` (local only), `migrations/`, `seed.sql`, `production/`, `checks/` (read-only check scripts), `marker/` (project markers), `tests/`, `templates/`
 - `scripts/`: `sql-files.ts` (header lines of pasted SQL), `test-sql-checks.sh` (tests of check and changing scripts) and `triad-ready.sh` (is TRIAD ready on the Mac); `tests/`: repository-level unit tests (`tests/sql-files.test.ts`, `tests/triad-ready.test.ts`, `tests/email-templates.test.ts`)
-- Later tasks add `screenshots/`, `TRIAD.md` and `templates/` (at the root)
+- Later tasks add `TRIAD.md` and `templates/` (at the root)

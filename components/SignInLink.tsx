@@ -8,5 +8,9 @@ export function SignInLink() {
   const search = useSearchParams().toString();
   const here = search ? `${path}?${search}` : path;
   const href = here === "/" || here.startsWith("/sign-in") ? "/sign-in" : `/sign-in?next=${encodeURIComponent(here)}`;
-  return <Link href={href}>Sign in</Link>;
+  return (
+    <Link href={href} className="btn btn-small">
+      Sign in
+    </Link>
+  );
 }

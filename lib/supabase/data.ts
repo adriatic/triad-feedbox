@@ -1,5 +1,5 @@
 import { cache } from "react";
-import type { ChangelogEntry, ChangelogItem, Idea, Role, Viewer } from "@/lib/feedbox";
+import { isDuplicateVote, isSearchable, refusalMessage, SEARCH_LIMIT, SIMILAR_LIMIT, searchText, type ChangelogEntry, type ChangelogItem, type Idea, type Role, type Viewer } from "@/lib/feedbox";
 import { boardSlug } from "./env";
 import { createClient } from "./server";
 
@@ -107,27 +107,133 @@ export async function getIdea(boardId: string, id: number): Promise<Idea | null>
 export interface CommentView {
   id: number;
   authorName: string;
+  /** True when the author owns the board and the viewer may know it (see getOwnerIds). */
+  byOwner: boolean;
   body: string;
   createdAt: string;
   hidden: boolean;
 }
 
-export async function getComments(ideaId: number): Promise<CommentView[]> {
+/** Comments on an idea, flat, newest last (F1 section 7). */
+export async function getComments(boardId: string, ideaId: number): Promise<CommentView[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("comments")
     .select("id, author_id, body, created_at, hidden_at")
     .eq("idea_id", ideaId)
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true });
   if (error) throw new Error(`Could not read the comments: ${error.message}`);
-  const names = await getDisplayNames(data.map((c) => c.author_id));
+  const [names, owners] = await Promise.all([getDisplayNames(data.map((c) => c.author_id)), getOwnerIds(boardId)]);
   return data.map((c) => ({
     id: c.id,
     authorName: names.get(c.author_id) ?? "Someone",
+    byOwner: owners.has(c.author_id),
     body: c.body,
     createdAt: c.created_at,
     hidden: c.hidden_at !== null,
   }));
+}
+
+/**
+ * The board's owners, as far as row-level security lets this viewer see them:
+ * an owner sees every owner of the board, anyone else sees at most themselves,
+ * and a visitor sees none. So the "Owner" mark on comments shows only for owners
+ * until the database lets everyone read who the owners are (F5 report, decision F5-D1).
+ */
+export async function getOwnerIds(boardId: string): Promise<Set<string>> {
+  const supabase = await createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return new Set();
+  const { data, error } = await supabase.from("board_owners").select("user_id").eq("board_id", boardId);
+  if (error) throw new Error(`Could not read the owners: ${error.message}`);
+  return new Set(data.map((o) => o.user_id));
+}
+
+/** The ideas this viewer has voted for (votes are readable by their own person only). */
+export async function getMyVotes(viewer: ViewerInfo, ideaIds: readonly number[]): Promise<Set<number>> {
+  if (!viewer.userId || ideaIds.length === 0) return new Set();
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("votes")
+    .select("idea_id")
+    .eq("user_id", viewer.userId)
+    .in("idea_id", [...ideaIds]);
+  if (error) throw new Error(`Could not read your votes: ${error.message}`);
+  return new Set(data.map((v) => v.idea_id));
+}
+
+/**
+ * The board's search box (F1 section 5): the same similar_ideas function as
+ * Post an idea, matching titles and details. Returns idea ids, best match first.
+ */
+export async function searchIdeaIds(boardId: string, query: string): Promise<number[]> {
+  if (!isSearchable(query)) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("similar_ideas", {
+    p_board_id: boardId,
+    p_query: searchText(query),
+    p_limit: SEARCH_LIMIT,
+    p_include_body: true,
+  });
+  if (error) throw new Error(`Could not search the ideas: ${error.message}`);
+  return data.map((r) => r.id);
+}
+
+export interface SimilarIdea {
+  id: number;
+  title: string;
+  status: Idea["status"];
+  voteCount: number;
+  voted: boolean;
+}
+
+/**
+ * Post an idea's similar ideas (F1 section 5): similar_ideas on titles, at
+ * most 5, best first, each with whether the viewer has voted for it. Asked
+ * on the server (task F5b), like the board's search box.
+ */
+export async function getSimilarIdeas(boardId: string, viewer: ViewerInfo, query: string): Promise<SimilarIdea[]> {
+  if (!isSearchable(query)) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("similar_ideas", {
+    p_board_id: boardId,
+    p_query: searchText(query),
+    p_limit: SIMILAR_LIMIT,
+    p_include_body: false,
+  });
+  if (error) throw new Error(`Could not look for similar ideas: ${error.message}`);
+  const mine = await getMyVotes(viewer, data.map((r) => r.id));
+  return data.map((r) => ({ id: r.id, title: r.title, status: r.status, voteCount: r.vote_count, voted: mine.has(r.id) }));
+}
+
+export type VoteResult = { ok: true; voted: boolean; count: number } | { ok: false; message: string };
+
+/**
+ * Vote for an idea, or take the vote back, as the signed-in person; then read
+ * the count and the person's own vote back from the database, which is the
+ * authority. A second vote is refused by the primary key on votes (23505) and
+ * ignored, so a double click or a second tab never counts twice.
+ */
+export async function setMyVote(ideaId: number, want: boolean): Promise<VoteResult> {
+  if (!Number.isSafeInteger(ideaId) || ideaId <= 0) return { ok: false, message: "This idea is no longer on the board." };
+  const supabase = await createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  const userId = auth.user?.id;
+  if (!userId) return { ok: false, message: "Your session has ended. Sign in again to vote." };
+  const { error: writeError } = want
+    ? await supabase.from("votes").insert({ idea_id: ideaId })
+    : await supabase.from("votes").delete().eq("idea_id", ideaId).eq("user_id", userId);
+  if (writeError && !isDuplicateVote(writeError)) {
+    return { ok: false, message: refusalMessage(writeError, want ? "Voting" : "Removing your vote") };
+  }
+  const [{ data: idea, error: ideaError }, { data: mine, error: mineError }] = await Promise.all([
+    supabase.from("ideas").select("vote_count").eq("id", ideaId).maybeSingle(),
+    supabase.from("votes").select("idea_id").eq("idea_id", ideaId).eq("user_id", userId).maybeSingle(),
+  ]);
+  if (ideaError || mineError) return { ok: false, message: "Your vote was sent, but the new count could not be read. Reload the page." };
+  if (!idea) return { ok: false, message: "This idea is no longer on the board." };
+  return { ok: true, voted: mine !== null, count: idea.vote_count };
 }
 
 /** Display names by person (profiles never hold an email address). */
