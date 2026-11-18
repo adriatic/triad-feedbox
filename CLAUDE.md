@@ -41,6 +41,8 @@ Supabase projects were created with "Automatically expose new tables" ON and "En
 - Order: decisions Nik must make, then Steps for Nik (complete, numbered), then results, links, check names and commit hashes.
 - Before sending, search the report for unfilled placeholders or missing items and fix them.
 - `cc-reports` is never merged into `main`. Use a separate worktree or `git switch`; never mix report commits into a task branch.
+- **Architecture description (task A1):** every task that changes how the parts connect (a new path, a new service, a key, or a rule in the "never" list) updates `docs/ARCHITECTURE.md` in the same pull request, and its report says so.
+- **Steps check links by clicking (Nik, F5d-3, 2026-11-17):** a step checks what a link does by clicking it, never by Chrome's hover address box, which did not show on Nik's Mac.
 
 ## Commands
 - `npm ci`: install
