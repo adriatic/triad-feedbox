@@ -311,6 +311,9 @@ isOneToOne: false
 "publish_changelog_entry":
 { Args: { "p_entry_id": string,"p_publish"?: boolean }; Returns: undefined
                            },
+"remove_my_vote":
+{ Args: { "p_idea_id": number }; Returns: boolean
+                           },
 "set_idea_status":
 { Args: { "p_idea_id": number,"p_status": Database["public"]['Enums']["idea_status"] }; Returns: undefined
                            },

@@ -160,10 +160,10 @@ checks (n, check_name, ok, detail) as (
               then format('this project has no project marker (triad.project). This check is for %s.', (select for_project from request))
               else format('this project is marked %s; this check is for %s.', (select name from project), (select for_project from request)) end
   union all
-  select 2, 'migrations', a.md5 = '2814d0ac55dce9fa93db839da532dec7',
-         case when a.md5 = '2814d0ac55dce9fa93db839da532dec7'
-              then 'the Feedbox v1, O2 and F6a migrations are present and unchanged (fingerprint 2814d0ac55dce9fa93db839da532dec7).'
-              else format('the database does not match the Feedbox v1, O2 and F6a migrations (fingerprint %s, expected 2814d0ac55dce9fa93db839da532dec7).', a.md5) end
+  select 2, 'migrations', a.md5 = '081ca51dd5b60c7b98cf8a6309584fb0',
+         case when a.md5 = '081ca51dd5b60c7b98cf8a6309584fb0'
+              then 'the Feedbox v1, O2 and F6a migrations are present and unchanged (fingerprint 081ca51dd5b60c7b98cf8a6309584fb0).'
+              else format('the database does not match the Feedbox v1, O2 and F6a migrations (fingerprint %s, expected 081ca51dd5b60c7b98cf8a6309584fb0).', a.md5) end
   from mig_all a
   union all
   select 3, 'person removed', coalesce((select users = 0 from person), false),

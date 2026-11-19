@@ -27,8 +27,8 @@ select throws_ok($$ insert into public.comments (idea_id, body) values (tests.id
   null, 'a comment has at most 2,000 characters');
 select throws_ok($$ insert into public.comments (idea_id, body) values (tests.idea_id('Hidden idea'), 'Hello') $$, '42501',
   'new row violates row-level security policy for table "comments"', 'nobody comments on a hidden idea');
-select throws_ok($$ insert into public.comments (idea_id, body) values (tests.idea_id('Merged idea'), 'Hello') $$, '42501',
-  'new row violates row-level security policy for table "comments"', 'nobody comments on a merged idea');
+select throws_ok($$ insert into public.comments (idea_id, body) values (tests.idea_id('Merged idea'), 'Hello') $$, 'P0001',
+  'This idea was just merged into “Idea with comments”. Post your comment there.', 'nobody comments on a merged idea, and is told where to comment (task F6b)');
 select throws_ok($$ update public.comments set body = 'Edited' $$, '42501',
   'permission denied for table comments', 'comments are not edited in version 1');
 select throws_ok($$ update public.comments set hidden_at = now() $$, '42501',

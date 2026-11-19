@@ -74,6 +74,16 @@ export function isRateLimited(error: DbError | null | undefined): boolean {
   return (error.details ?? "").startsWith("rate_limit:") || error.message === RATE_LIMIT_MESSAGE;
 }
 
+/**
+ * True when the database refused a vote, an unvote or a comment because the
+ * idea was just merged (task F6b: trigger refuse_merged_idea and
+ * remove_my_vote, detail "merged:<target id>"). Their message is written for
+ * people and names where to go instead, so it is shown as it is.
+ */
+export function isMergedRefusal(error: DbError | null | undefined): boolean {
+  return (error?.details ?? "").startsWith("merged:");
+}
+
 /** True when the database refused a second vote by the same person (primary key on votes). */
 export function isDuplicateVote(error: DbError | null | undefined): boolean {
   return error?.code === "23505";
@@ -82,6 +92,7 @@ export function isDuplicateVote(error: DbError | null | undefined): boolean {
 /** A refusal in words a person can act on. */
 export function refusalMessage(error: DbError, what: string): string {
   if (isRateLimited(error)) return RATE_LIMIT_MESSAGE;
+  if (isMergedRefusal(error) && error.message) return error.message;
   return `${what} did not work. Reload the page and try again.`;
 }
 

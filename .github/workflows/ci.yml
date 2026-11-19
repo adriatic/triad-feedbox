@@ -69,6 +69,9 @@ jobs:
       # The check scripts in supabase/checks/ and every changing script, run
       # the way the SQL Editor runs them, on the right and the wrong states.
       - run: npm run test:checks
+      # Races (task F6b): a merge or an undo while other people vote, unvote
+      # and comment, and two owners at once, each in two sessions at the same time.
+      - run: npm run test:races
 
   e2e:
     name: e2e

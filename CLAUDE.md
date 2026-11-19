@@ -27,7 +27,7 @@ Feedbox is the worked example for an article about TRIAD (Tracker-Recorded, Inde
 2. Never push to `main` directly. The ruleset on `main` restricts deletions, blocks force pushes, requires a pull request (0 approvals) and requires six status checks: `lint`, `typecheck`, `unit`, `db`, `e2e` and `Vercel` (`lint`, `typecheck`, `unit` and `Vercel` since M2, `db` since M3, `e2e` since M5).
 3. **Never merge** in a build task. Merging is a separate merge task (M2, M3, …), given only after Nik says "merge" in his chat with Claude.ai. Nik's word, with its time, is recorded in the TRIAD tracker, and the merge task message quotes it.
 4. A merge task: check that the branch head is the approved commit, confirm the pull request's checks are green, squash-merge with gh (`--match-head-commit`), delete the branch, confirm that the Production deployment of `main` succeeds, tag the merge commit `f<n>`, and report.
-5. CI checks (GitHub Actions workflow `CI`): `lint`, `typecheck`, `unit`, `db` (pgTAP tests and `npm run test:checks` on a local Supabase database in Docker on the runner), `e2e` (since F4: Playwright against the app built on the runner and LOCAL Supabase in Docker; a required check since M5). All five, plus Vercel's own status `Vercel`, are required on `main`.
+5. CI checks (GitHub Actions workflow `CI`): `lint`, `typecheck`, `unit`, `db` (pgTAP tests, `npm run test:checks` and, since F6b, `npm run test:races` on a local Supabase database in Docker on the runner), `e2e` (since F4: Playwright against the app built on the runner and LOCAL Supabase in Docker; a required check since M5). All five, plus Vercel's own status `Vercel`, are required on `main`.
 
 ## Three rules that are never broken
 1. **You never hold a Supabase secret key**: not in a file on the Mac, not in your shell, not in a commit. No secret key of a hosted project exists anywhere outside the Supabase dashboard. The three GitHub Actions secrets `SUPABASE_PREVIEW_SECRET_KEY`, `SUPABASE_PREVIEW_PUBLISHABLE_KEY` and `SUPABASE_PREVIEW_URL`, which no workflow ever used, were deleted on 2026-11-18 by Nik's decision A1-D1.
@@ -54,6 +54,7 @@ Supabase projects were created with "Automatically expose new tables" ON and "En
 - `npm run db:reset`: rebuild the local database from the migration and the seed
 - `npm run db:stop`: stop this project's local containers only
 - `npm run test:checks`: runs every check script and changing script on the right and the wrong states (local database only; resets it at the start and the end)
+- `npm run test:races`: runs a merge or an undo in one database session while another session votes, unvotes, comments, merges or undoes at the same moment (task F6b; local database only; resets it at the start and the end)
 - `npm run sql:headers`: sets the line count in the header line of every pasted SQL file
 - `npm run e2e:supabase`: the full local Supabase stack (database, auth, API, Mailpit) that the end-to-end tests need; `npm run db:start` starts the database only
 - `npm run test:e2e`: Playwright tests in `e2e/` (builds the app, starts it on http://127.0.0.1:3000 with the LOCAL Supabase keys from `supabase status`, never a hosted project)
@@ -204,5 +205,5 @@ One key per project, so either can be revoked without touching the other.
 - `lib/feedbox/`: core library. Pure TypeScript with **no** Supabase or Next imports; unit tests sit beside the code as `*.test.ts`
 - `design/`: design brief and the six screen sources (part of the app's definition)
 - `supabase/`: `config.toml` (local only), `migrations/`, `seed.sql`, `production/`, `apply/` (a migration as Nik pastes it, guarded by the project marker: `<project>-<topic>.sql`, tasks O2 and F6a; `tests/sql-files.test.ts` keeps its statements identical to the migration file), `preview/` (changing scripts for feedbox-preview only, task F6), `people/` (removing a person on request: the template `remove-person.sql`, copied per request with only its block "request" changed, task F6), `checks/` (read-only check scripts), `marker/` (project markers), `tests/`, `templates/`
-- `scripts/`: `sql-files.ts` (header lines of pasted SQL), `test-sql-checks.sh` (tests of check and changing scripts) and `triad-ready.sh` (is TRIAD ready on the Mac); `tests/`: repository-level unit tests (`tests/sql-files.test.ts`, `tests/triad-ready.test.ts`, `tests/email-templates.test.ts`)
+- `scripts/`: `sql-files.ts` (header lines of pasted SQL), `test-sql-checks.sh` (tests of check and changing scripts), `test-races.sh` (two sessions at the same time, task F6b) and `triad-ready.sh` (is TRIAD ready on the Mac); `tests/`: repository-level unit tests (`tests/sql-files.test.ts`, `tests/triad-ready.test.ts`, `tests/email-templates.test.ts`)
 - Later tasks add `TRIAD.md` and `templates/` (at the root)

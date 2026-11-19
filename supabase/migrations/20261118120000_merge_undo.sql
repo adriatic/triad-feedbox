@@ -23,6 +23,18 @@
 --   authenticated where needed.
 -- * Merges made before this migration have no log row: their note stays on
 --   the target's page, without an Undo merge button.
+-- * Races (task F6b): a vote or a comment waits for a merge or an undo of its
+--   idea that is in progress, and then refuses in words if the idea was just
+--   merged (trigger refuse_merged_idea, which takes over the "not merged"
+--   rule from the policies votes_insert_own and comments_insert_own, whose
+--   check uses the moment the request started and so cannot see a merge that
+--   committed while it waited). An unvote goes through
+--   public.remove_my_vote(p_idea_id), which locks the idea first for the
+--   same reason and so never deadlocks with an undo; votes are no longer
+--   deleted directly through the API. merge_ideas and undo_merge lock every
+--   idea they change in one statement, in id order, so two of them never
+--   deadlock either. scripts/test-races.sh runs each case in two sessions at
+--   the same time.
 -- * The Feedbox v1 (20261113000000) and O2 (20261118000000) migrations are
 --   never edited; this is a new migration. Nik pastes it on a hosted project
 --   through the guarded copy in supabase/apply/ (task F6a), which runs
@@ -58,46 +70,117 @@ create table public.idea_merge_votes (
 
 create index idea_merge_votes_user_idx on public.idea_merge_votes (user_id);
 
--- A person who removes their vote on the target after a merge: noted in the
--- log, so an undo neither gives them that vote back on the source nor takes a
--- later vote of theirs from the target. Only their own rows, by auth.uid().
-create function private.note_merged_vote_removed(p_idea_id bigint)
-returns void
-language sql
+-- Races (task F6b). A vote or a comment on an idea that a merge or an undo
+-- holds waits for it (the key share lock conflicts with their "for update"),
+-- then reads the idea as it is now. If it was just merged, the request is
+-- refused in words and nothing is written: no vote or comment is ever left
+-- unseen on a merged idea. Security definer, so it may lock the row.
+create function private.refuse_merged_idea()
+returns trigger
+language plpgsql
 security definer
 set search_path = ''
 as $$
-  update public.idea_merge_votes mv
-    set target_vote_removed_at = now()
-    from public.idea_merges m
-    where m.id = mv.merge_id
-      and m.target_id = p_idea_id
-      and m.undone_at is null
-      and mv.user_id = (select auth.uid())
-      and mv.target_vote_removed_at is null;
-$$;
-
--- Security INVOKER on purpose, like the rate-limit trigger: current_user is
--- then the role of the request. Only a person's own unvote through the app
--- counts; votes moved by merge_ideas and undo_merge (which run as the
--- function owner) do not.
-create function private.votes_after_delete_merge_log()
-returns trigger
-language plpgsql
-security invoker
-set search_path = ''
-as $$
+declare
+  v_merged_into bigint;
+  v_target      public.ideas;
+  v_where       text;
 begin
-  if current_user in ('anon', 'authenticated') then
-    perform private.note_merged_vote_removed(old.idea_id);
+  select i.merged_into_id into v_merged_into
+  from public.ideas i
+  where i.id = new.idea_id
+  for key share;
+  if v_merged_into is not null then
+    select * into v_target from public.ideas t where t.id = v_merged_into;
+    -- Never name a hidden idea to someone who may not see it.
+    v_where := case when v_target.hidden_at is null then '“' || v_target.title || '”' else 'another idea' end;
+    if tg_table_name = 'votes' then
+      raise exception 'This idea was just merged into %. Vote there.', v_where
+        using errcode = 'P0001', detail = 'merged:' || v_merged_into;
+    end if;
+    raise exception 'This idea was just merged into %. Post your comment there.', v_where
+      using errcode = 'P0001', detail = 'merged:' || v_merged_into;
   end if;
-  return null;
+  return new;
 end;
 $$;
 
-create trigger votes_after_delete_merge_log
-  after delete on public.votes
-  for each row execute function private.votes_after_delete_merge_log();
+create trigger votes_refuse_merged
+  before insert on public.votes
+  for each row execute function private.refuse_merged_idea();
+create trigger comments_refuse_merged
+  before insert on public.comments
+  for each row execute function private.refuse_merged_idea();
+
+-- The trigger above is now the one place that refuses a merged idea, and it
+-- sees the idea as it is now. The policies keep every other rule.
+alter policy votes_insert_own on public.votes
+  with check (
+    user_id = (select auth.uid())
+    and public.has_display_name()
+    and exists (select 1 from public.ideas i where i.id = idea_id and i.hidden_at is null)
+  );
+alter policy comments_insert_own on public.comments
+  with check (
+    author_id = (select auth.uid())
+    and public.has_display_name()
+    and exists (select 1 from public.ideas i where i.id = idea_id and i.hidden_at is null)
+  );
+
+-- Removes the signed-in person's own vote (task F6b; the app's only way to
+-- unvote). It locks the idea first, so it waits for a merge or an undo of
+-- that idea in progress instead of deadlocking with it, and then:
+-- * if the idea was just merged, it refuses in words (the vote moved with the
+--   merge, so the person is told where it is now);
+-- * otherwise it removes the vote, and notes in the merge log that the person
+--   removed their vote on this idea after a merge into it, so an undo neither
+--   gives that vote back on the source nor takes a later vote of theirs.
+-- Returns true if a vote was removed, false if there was none.
+create function public.remove_my_vote(p_idea_id bigint)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_user    uuid := (select auth.uid());
+  v_idea    public.ideas;
+  v_target  public.ideas;
+  v_removed integer;
+begin
+  if v_user is null then
+    raise exception 'Sign in to remove your vote.' using errcode = '42501';
+  end if;
+  select * into v_idea from public.ideas where id = p_idea_id for key share;
+  if v_idea.id is null then
+    raise exception 'Idea not found.' using errcode = 'P0002';
+  end if;
+  if v_idea.merged_into_id is not null then
+    select * into v_target from public.ideas t where t.id = v_idea.merged_into_id;
+    raise exception 'This idea was just merged into %. Your vote moved there with it; remove it there if you wish.',
+      case when v_target.hidden_at is null then '“' || v_target.title || '”' else 'another idea' end
+      using errcode = 'P0001', detail = 'merged:' || v_idea.merged_into_id;
+  end if;
+
+  delete from public.votes where idea_id = p_idea_id and user_id = v_user;
+  get diagnostics v_removed = row_count;
+  if v_removed > 0 then
+    update public.idea_merge_votes mv
+      set target_vote_removed_at = now()
+      from public.idea_merges m
+      where m.id = mv.merge_id
+        and m.target_id = p_idea_id
+        and m.undone_at is null
+        and mv.user_id = v_user
+        and mv.target_vote_removed_at is null;
+  end if;
+  return v_removed > 0;
+end;
+$$;
+
+-- Votes are removed through remove_my_vote only, never deleted directly.
+drop policy votes_delete_own on public.votes;
+revoke delete on public.votes from authenticated;
 
 -- Merges the source idea into the target (F1 section 5) and writes the log.
 -- Returns the target's new vote count. The same rules as in version 1.
@@ -117,9 +200,12 @@ begin
     raise exception 'An idea cannot be merged into itself.' using errcode = 'check_violation';
   end if;
 
-  -- Lock both rows, always in id order, so two merges cannot deadlock.
+  -- Lock every idea this merge changes (both ideas and the ideas merged
+  -- earlier into the source) in ONE statement, in id order, so two merges,
+  -- or a merge and an undo, never deadlock (task F6b).
   perform 1 from public.ideas
-    where id in (p_source_id, p_target_id) order by id for update;
+    where id in (p_source_id, p_target_id) or merged_into_id = p_source_id
+    order by id for update;
   select * into v_source from public.ideas where id = p_source_id;
   select * into v_target from public.ideas where id = p_target_id;
 
@@ -233,9 +319,12 @@ begin
     raise exception 'The idea it was merged into no longer exists, so this merge cannot be undone.' using errcode = 'check_violation';
   end if;
 
-  -- Lock both ideas, always in id order, as merge_ideas does.
+  -- Lock every idea this undo changes (both ideas and the ideas the merge
+  -- pointed at the target) in ONE statement, in id order, as merge_ideas
+  -- does, so a merge and an undo never deadlock (task F6b).
   perform 1 from public.ideas
-    where id in (v_merge.source_id, v_merge.target_id) order by id for update;
+    where id in (v_merge.source_id, v_merge.target_id) or id = any (v_merge.rerouted_idea_ids)
+    order by id for update;
   select * into v_source from public.ideas where id = v_merge.source_id;
   select * into v_target from public.ideas where id = v_merge.target_id;
 
@@ -323,16 +412,14 @@ revoke all on sequence public.idea_merges_id_seq from anon, authenticated;
 revoke all on function
   public.merge_ideas(bigint, bigint),
   public.undo_merge(bigint),
-  private.note_merged_vote_removed(bigint),
-  private.votes_after_delete_merge_log()
+  public.remove_my_vote(bigint),
+  private.refuse_merged_idea()
   from public, anon, authenticated;
 
 grant select on public.idea_merges to authenticated;
 grant execute on function public.merge_ideas(bigint, bigint) to authenticated;
 grant execute on function public.undo_merge(bigint) to authenticated;
--- The unvote trigger runs as the caller and notes the unvote through this
--- helper. "private" is not exposed by the API, so this does not make it callable.
-grant execute on function private.note_merged_vote_removed(bigint) to authenticated;
+grant execute on function public.remove_my_vote(bigint) to authenticated;
 
 -- Row-level security: owners of the board read the merges; nobody reads the
 -- votes in the log, and nobody writes either table, except through the functions.

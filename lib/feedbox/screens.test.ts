@@ -3,6 +3,7 @@ import {
   boardHref,
   boardInitial,
   isDuplicateVote,
+  isMergedRefusal,
   isRateLimited,
   isSearchable,
   paragraphs,
@@ -104,5 +105,28 @@ describe("owner tools: refusals in words (task F6)", () => {
 
   it("falls back to the general message otherwise", () => {
     expect(ownerRefusalMessage({ code: "XX000", message: "boom" }, "Changing the status")).toBe("Changing the status did not work. Reload the page and try again.");
+  });
+});
+
+describe("a vote, unvote or comment on an idea that was just merged (task F6b)", () => {
+  const merged = {
+    code: "P0001",
+    message: "This idea was just merged into “Sync between two laptops”. Vote there.",
+    details: "merged:6",
+  };
+
+  it("is recognised by the database's detail", () => {
+    expect(isMergedRefusal(merged)).toBe(true);
+    expect(isMergedRefusal({ code: "P0001", message: "x", details: "rate_limit:vote" })).toBe(false);
+    expect(isMergedRefusal(null)).toBe(false);
+  });
+
+  it("shows the database's own words, which say where to go instead", () => {
+    expect(refusalMessage(merged, "Voting")).toBe("This idea was just merged into “Sync between two laptops”. Vote there.");
+  });
+
+  it("never shows another database message as it is", () => {
+    expect(refusalMessage({ code: "42501", message: "new row violates row-level security policy", details: null }, "Voting"))
+      .toBe("Voting did not work. Reload the page and try again.");
   });
 });

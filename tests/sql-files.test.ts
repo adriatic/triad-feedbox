@@ -132,7 +132,7 @@ describe("the F6a migration (the merge log and undo_merge)", () => {
 
   it("is exactly the reviewed file (task F6a), never edited after it has run on feedbox-preview", () => {
     expect(createHash("sha256").update(migration).digest("hex"))
-      .toBe("60a9681b612a90a1c7db046bee0b75fe598499d490da993d60f7707d51e037f7");
+      .toBe("bfa9404f0988121cad0fe1a3c0aa3b7414e850fc4aabbf7d19337f88a6d9409f");
   });
 
   it("holds no email column and no email address", () => {
@@ -174,8 +174,8 @@ describe("task F6: Nik as an owner on feedbox-preview, and removing a person on 
   // fingerprint. The removal template must work on the database as it is now: v1 + O2 + F6a.
   it.each([
     ["supabase/preview/owner-nik.sql", "ea60181fdd11e237aa19ee5d6d6c186d"],
-    ["supabase/people/remove-person.sql", "2814d0ac55dce9fa93db839da532dec7"],
-    ["supabase/checks/person-removal.sql", "2814d0ac55dce9fa93db839da532dec7"],
+    ["supabase/people/remove-person.sql", "081ca51dd5b60c7b98cf8a6309584fb0"],
+    ["supabase/checks/person-removal.sql", "081ca51dd5b60c7b98cf8a6309584fb0"],
   ])("%s uses the fingerprint block of the checks word for word, and expects the fingerprint %s", (path, fingerprint) => {
     expect(shared).toBeDefined();
     const text = read(path);

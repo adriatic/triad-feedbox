@@ -46,7 +46,7 @@ select results_eq(
        ('authenticated', 'ideas', 'SELECT'),
        ('anon', 'profiles', 'SELECT'),
        ('authenticated', 'profiles', 'SELECT'),
-       ('authenticated', 'votes', 'DELETE,SELECT') $$,
+       ('authenticated', 'votes', 'SELECT') $$,
   'anon and authenticated hold exactly the table privileges of F1 section 3');
 
 select results_eq(
@@ -84,6 +84,7 @@ select results_eq(
        ('anon', 'is_board_owner', true),             ('authenticated', 'is_board_owner', true),
        ('anon', 'merge_ideas', false),               ('authenticated', 'merge_ideas', true),
        ('anon', 'publish_changelog_entry', false),   ('authenticated', 'publish_changelog_entry', true),
+       ('anon', 'remove_my_vote', false),            ('authenticated', 'remove_my_vote', true),
        ('anon', 'set_idea_status', false),           ('authenticated', 'set_idea_status', true),
        ('anon', 'similar_ideas', true),              ('authenticated', 'similar_ideas', true),
        ('anon', 'undo_merge', false),                ('authenticated', 'undo_merge', true),
@@ -96,8 +97,8 @@ select results_eq(
   $$ select p.proname::text collate "default" from pg_proc p
      where p.pronamespace = 'private'::regnamespace and has_function_privilege('authenticated', p.oid, 'EXECUTE')
      order by 1 $$,
-  $$ values ('note_merged_vote_removed'), ('recent_count') $$,
-  'authenticated may call only private.recent_count (the rate-limit trigger) and private.note_merged_vote_removed (the unvote trigger, task F6a); the schema is not exposed by the API');
+  $$ values ('recent_count') $$,
+  'authenticated may call only private.recent_count (needed by the rate-limit trigger); the schema is not exposed by the API');
 
 -- Email addresses are never readable.
 select hasnt_column('public', 'profiles', 'email', 'profiles has no email column');

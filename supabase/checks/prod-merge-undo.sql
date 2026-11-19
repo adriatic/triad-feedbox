@@ -1,4 +1,4 @@
--- supabase/checks/prod-merge-undo.sql | 248 lines | last line: -- end of prod-merge-undo.sql
+-- supabase/checks/prod-merge-undo.sql | 260 lines | last line: -- end of prod-merge-undo.sql
 -- =============================================================================
 -- READ-ONLY check (task F6a). Changes nothing: one SELECT.
 -- For: feedbox-prod. When: right after supabase/apply/prod-merge-undo.sql.
@@ -8,8 +8,10 @@
 -- security; that only signed-in owners read idea_merges, and nobody reads
 -- idea_merge_votes or writes either table directly; that merge_ideas writes
 -- the log and undo_merge exists, both security definer with search_path '' and
--- callable by signed-in people only; that the unvote trigger is in place; and
--- that every merge in the log that can still be undone names a merged idea.
+-- callable by signed-in people only; that the race guards of task F6b are in
+-- place (a vote or comment on a merged idea is refused after waiting for the
+-- merge; votes are removed only through remove_my_vote); and that every merge
+-- in the log that can still be undone names a merged idea.
 -- Result: rows (n, check_name, result, message). Row 0 is the overall result.
 -- =============================================================================
 
@@ -148,10 +150,18 @@ fns as (
   from pg_proc p
   where p.oid in (to_regprocedure('public.merge_ideas(bigint, bigint)'), to_regprocedure('public.undo_merge(bigint)'))
 ),
-trg as (
-  select count(*) as n
-  from pg_trigger t
-  where t.tgrelid = to_regclass('public.votes') and t.tgname = 'votes_after_delete_merge_log' and t.tgenabled = 'O'
+guards as (
+  select (select count(*) from pg_trigger t
+           where t.tgenabled = 'O' and t.tgfoid = to_regprocedure('private.refuse_merged_idea()')
+             and ((t.tgrelid = to_regclass('public.votes') and t.tgname = 'votes_refuse_merged')
+                  or (t.tgrelid = to_regclass('public.comments') and t.tgname = 'comments_refuse_merged'))) as triggers,
+         coalesce((select p.prosecdef and coalesce(array_to_string(p.proconfig, ','), '') = 'search_path=""'
+                          and has_function_privilege('authenticated', p.oid, 'EXECUTE')
+                          and not has_function_privilege('anon', p.oid, 'EXECUTE')
+                          and not (p.proacl is null or exists (select 1 from aclexplode(p.proacl) a where a.grantee = 0))
+                     from pg_proc p where p.oid = to_regprocedure('public.remove_my_vote(bigint)')), false) as unvote_fn,
+         coalesce((select has_table_privilege('authenticated', c.oid, 'DELETE') or has_table_privilege('anon', c.oid, 'DELETE')
+                     from pg_class c where c.oid = to_regclass('public.votes')), true) as votes_deletable
 ),
 open_merges as (
   select (xpath('/table/row/open/text()', x))[1]::text::int as open,
@@ -169,12 +179,12 @@ checks (n, check_name, ok, detail) as (
               then 'this project has no project marker (triad.project). This check is for feedbox-prod.'
               else format('this project is marked %s; this check is for feedbox-prod.', (select name from project)) end
   union all
-  select 2, 'migrations', a.md5 = '2814d0ac55dce9fa93db839da532dec7',
-         case when a.md5 = '2814d0ac55dce9fa93db839da532dec7'
-              then 'the Feedbox v1, O2 and F6a migrations are present and unchanged (fingerprint 2814d0ac55dce9fa93db839da532dec7).'
+  select 2, 'migrations', a.md5 = '081ca51dd5b60c7b98cf8a6309584fb0',
+         case when a.md5 = '081ca51dd5b60c7b98cf8a6309584fb0'
+              then 'the Feedbox v1, O2 and F6a migrations are present and unchanged (fingerprint 081ca51dd5b60c7b98cf8a6309584fb0).'
               when a.md5 = 'ea60181fdd11e237aa19ee5d6d6c186d'
-              then 'the database is the Feedbox v1 and O2 migrations WITHOUT the F6a migration (fingerprint ea60181fdd11e237aa19ee5d6d6c186d, expected 2814d0ac55dce9fa93db839da532dec7). Run supabase/apply/prod-merge-undo.sql first.'
-              else format('the database does not match the Feedbox v1, O2 and F6a migrations (fingerprint %s, expected 2814d0ac55dce9fa93db839da532dec7).', a.md5) end
+              then 'the database is the Feedbox v1 and O2 migrations WITHOUT the F6a migration (fingerprint ea60181fdd11e237aa19ee5d6d6c186d, expected 081ca51dd5b60c7b98cf8a6309584fb0). Run supabase/apply/prod-merge-undo.sql first.'
+              else format('the database does not match the Feedbox v1, O2 and F6a migrations (fingerprint %s, expected 081ca51dd5b60c7b98cf8a6309584fb0).', a.md5) end
   from mig_all a
   union all
   select 3, 'merge log', (select count(*) filter (where rls) from logt) = 2,
@@ -215,8 +225,10 @@ checks (n, check_name, ok, detail) as (
                                   case when anon_exec then 'yes' else 'no' end, case when public_exec then 'yes' else 'no' end)
                     from fns where name = 'undo_merge') end
   union all
-  select 7, 'unvote trigger', (select n from trg) = 1,
-         format('the trigger votes_after_delete_merge_log on public.votes, switched on: found %s (expected 1).', (select n from trg))
+  select 7, 'race guards', (select triggers = 2 and unvote_fn and not votes_deletable from guards),
+         (select format('triggers that refuse a vote or comment on a merged idea after waiting for the merge, switched on: %s (expected 2, on votes and on comments); public.remove_my_vote is security definer with search_path "", callable by signed-in people only: %s (expected yes); votes can be deleted directly through the API: %s (expected no).',
+                        triggers, case when unvote_fn then 'yes' else 'no' end, case when votes_deletable then 'yes' else 'no' end)
+            from guards)
   union all
   select 8, 'open merges', coalesce((select not_merged = 0 from open_merges), false),
          case when not exists (select 1 from open_merges) then 'the merge log is missing, so nothing could be asked.'

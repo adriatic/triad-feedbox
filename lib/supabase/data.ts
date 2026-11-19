@@ -272,7 +272,10 @@ export type VoteResult = { ok: true; voted: boolean; count: number } | { ok: fal
  * Vote for an idea, or take the vote back, as the signed-in person; then read
  * the count and the person's own vote back from the database, which is the
  * authority. A second vote is refused by the primary key on votes (23505) and
- * ignored, so a double click or a second tab never counts twice.
+ * ignored, so a double click or a second tab never counts twice. A vote goes
+ * in as a row; a vote is taken back through remove_my_vote, which waits for a
+ * merge or an undo of the idea in progress (task F6b). If the idea was just
+ * merged, the database says so in words, and that is shown as it is.
  */
 export async function setMyVote(ideaId: number, want: boolean): Promise<VoteResult> {
   if (!Number.isSafeInteger(ideaId) || ideaId <= 0) return { ok: false, message: "This idea is no longer on the board." };
@@ -282,7 +285,7 @@ export async function setMyVote(ideaId: number, want: boolean): Promise<VoteResu
   if (!userId) return { ok: false, message: "Your session has ended. Sign in again to vote." };
   const { error: writeError } = want
     ? await supabase.from("votes").insert({ idea_id: ideaId })
-    : await supabase.from("votes").delete().eq("idea_id", ideaId).eq("user_id", userId);
+    : await supabase.rpc("remove_my_vote", { p_idea_id: ideaId });
   if (writeError && !isDuplicateVote(writeError)) {
     return { ok: false, message: refusalMessage(writeError, want ? "Voting" : "Removing your vote") };
   }

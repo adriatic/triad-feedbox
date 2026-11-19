@@ -148,8 +148,8 @@ mig_all as (
 -- shared:fingerprint:end
   fp as (select a.md5 from mig_all a)
   select fp.md5 into v_md5 from fp;
-  if v_md5 is distinct from '2814d0ac55dce9fa93db839da532dec7' then
-    raise exception 'Refused: the database does not match the reviewed Feedbox v1, O2 and F6a migrations (fingerprint %, expected 2814d0ac55dce9fa93db839da532dec7). Nothing was changed.', v_md5;
+  if v_md5 is distinct from '081ca51dd5b60c7b98cf8a6309584fb0' then
+    raise exception 'Refused: the database does not match the reviewed Feedbox v1, O2 and F6a migrations (fingerprint %, expected 081ca51dd5b60c7b98cf8a6309584fb0). Nothing was changed.', v_md5;
   end if;
 
   -- 4. The person must exist (a double paste ends here: the first copy removed them).

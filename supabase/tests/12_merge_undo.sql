@@ -106,10 +106,10 @@ select tests.as_person('kim');
 insert into public.comments (idea_id, body) values (tests.idea_id('Sync between laptops'), 'After the merge.');
 reset role;
 select tests.as_person('max');
-delete from public.votes where idea_id = tests.idea_id('Sync between laptops');
+select public.remove_my_vote(tests.idea_id('Sync between laptops'));
 reset role;
 select tests.as_person('ned');
-delete from public.votes where idea_id = tests.idea_id('Sync between laptops');
+select public.remove_my_vote(tests.idea_id('Sync between laptops'));
 insert into public.votes (idea_id) values (tests.idea_id('Sync between laptops'));
 reset role;
 select results_eq(
