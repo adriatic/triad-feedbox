@@ -453,14 +453,14 @@ Each rule names the test or check that guards it.
 
 **Not built in version 1 (F1, section 11):** CAPTCHA, many boards per deployment, and editing or unpublishing a changelog entry in the app (the database allows both for owners; no screen offers them). The check of the hosted Preview is task P1.
 
-**Decisions** (from the F5, A1, F6 and F6a reports):
+**Decisions** (from the F5, A1, F6 and F6a reports, as recorded in the merge task M11):
 - **F5-D1 (decided 2026-11-18, done in task O2):** everyone may read who the board's owners are, so the Owner mark shows for every viewer (see 3.6 and 3.10).
-- **F5-D2 (open):** whether to build an end-to-end runner against the hosted Preview (`playwright.config.ts:4-7`).
+- **F5-D2 (decided):** an end-to-end check of the hosted Preview is task P1, after F6 (`playwright.config.ts:4-7`).
 - **A1-D2 (decided 2026-11-18, fixed later):** the search limit of 20 applies to the whole board before the tab is chosen (see 3.2); it is fixed later, with F6's database work or when a board grows, not now. F6 needed no database change; see the F6 report, decision F6-D2.
 - **F6-D1 (recorded in task F6a; Nik did not answer, Claude.ai took the recommendation, Nik may change it):** owners do not find hidden ideas by the board's search; they find them in the tab lists, and never in similar ideas (`similar_ideas` leaves them out, migration line 713).
 - **F6-D2 (recorded in task F6a, the same way):** the search limit of 20 (A1-D2) is not fixed now.
 - **F6-D3 (recorded in task F6a, the same way):** the merge panel keeps the vote count as a range.
-- **F6-D4 (open):** whether a removal copy may name the person's User UID in this public repository.
+- **F6-D4 (decided before the merge of F6, M11: keep as built):** a removal copy names the person's User UID in this public repository, never an email address.
 
 ## 8. The messages part (to carry over to another app)
 
