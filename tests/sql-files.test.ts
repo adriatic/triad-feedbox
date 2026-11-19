@@ -37,6 +37,10 @@ describe("pasted SQL files", () => {
       "supabase/apply/prod-merge-undo.sql",
       "supabase/checks/preview-merge-undo.sql",
       "supabase/checks/prod-merge-undo.sql",
+      "supabase/apply/preview-messages.sql",
+      "supabase/apply/prod-messages.sql",
+      "supabase/checks/preview-messages.sql",
+      "supabase/checks/prod-messages.sql",
     ]));
   });
 
@@ -167,15 +171,68 @@ describe("the F6a migration (the merge log and undo_merge)", () => {
   });
 });
 
+describe("the CT1 migration (messages to the owner)", () => {
+  const path = "supabase/migrations/20261119120000_messages.sql";
+  const migration = read(path);
+  const lines = migration.split("\n");
+  const first = lines.findIndex((l) => l !== "" && !l.startsWith("--"));
+  const body = lines.slice(first).join("\n").trimEnd();
+
+  it("is exactly the reviewed file (task CT1), never edited after it has run on feedbox-preview", () => {
+    expect(createHash("sha256").update(migration).digest("hex"))
+      .toBe("72290960b3767ff522a7c32d3c3e23315424dde3cab361de39957bff3ed7f3cb");
+  });
+
+  it("stores no email: the table has no email column, and only board_messages reads auth.users", () => {
+    const table = body.match(/create table public\.messages \([\s\S]*?\n\);/)?.[0];
+    expect(table).toBeDefined();
+    expect(table).not.toMatch(/mail/i);
+    expect(body).not.toMatch(/@/);
+    const functions = body.split(/\ncreate (?:or replace )?function /).slice(1);
+    const readers = functions.filter((f) => f.includes("auth.users")).map((f) => f.slice(0, f.indexOf("(")));
+    expect(readers).toEqual(["public.board_messages"]);
+  });
+
+  it.each(["preview", "prod"])("supabase/apply/%s-messages.sql runs the migration's statements word for word", (project) => {
+    const pasted = read(`supabase/apply/${project}-messages.sql`);
+    const between = pasted.match(/-- migration:begin\n([\s\S]*?)\n-- migration:end/)?.[1];
+    expect(between).toBe(body);
+  });
+
+  it.each(["preview", "prod"])("supabase/apply/%s-messages.sql uses the fingerprint block of the checks word for word and expects v1 + O2 + F6a", (project) => {
+    const shared = read("supabase/checks/prod-board.sql").match(/-- shared:fingerprint:begin[\s\S]*?-- shared:fingerprint:end/)?.[0];
+    expect(shared).toBeDefined();
+    const text = read(`supabase/apply/${project}-messages.sql`);
+    expect(text).toContain(shared!);
+    expect(text).toContain("'081ca51dd5b60c7b98cf8a6309584fb0'");
+  });
+
+  it.each(["preview", "prod"])("supabase/checks/%s-messages.sql expects v1 + O2 + F6a + CT1", (project) => {
+    expect(read(`supabase/checks/${project}-messages.sql`)).toContain("'f48a2386ba60d5b8353cc684891bdc25'");
+  });
+
+  it.each([
+    ["supabase/apply/preview-messages.sql", "supabase/apply/prod-messages.sql"],
+    ["supabase/checks/preview-messages.sql", "supabase/checks/prod-messages.sql"],
+  ])("%s and %s differ only in the project they are for", (preview, prod) => {
+    const strip = (text: string) => text
+      .split("\n").slice(1).join("\n")
+      .replaceAll("feedbox-preview", "PROJECT").replaceAll("feedbox-prod", "PROJECT")
+      .replaceAll("preview-messages", "FILE").replaceAll("prod-messages", "FILE")
+      .replace(/^-- Run once[\s\S]*?\n--\n/m, "");
+    expect(strip(read(prod))).toBe(strip(read(preview)));
+  });
+});
+
 describe("task F6: Nik as an owner on feedbox-preview, and removing a person on request", () => {
   const shared = read("supabase/checks/prod-board.sql").match(/-- shared:fingerprint:begin[\s\S]*?-- shared:fingerprint:end/)?.[0];
 
   // owner-nik.sql ran on feedbox-preview before task F6a, so it expects the v1 + O2
-  // fingerprint. The removal template must work on the database as it is now: v1 + O2 + F6a.
+  // fingerprint. The removal template must work on the database as it is now: v1 + O2 + F6a + CT1.
   it.each([
     ["supabase/preview/owner-nik.sql", "ea60181fdd11e237aa19ee5d6d6c186d"],
-    ["supabase/people/remove-person.sql", "081ca51dd5b60c7b98cf8a6309584fb0"],
-    ["supabase/checks/person-removal.sql", "081ca51dd5b60c7b98cf8a6309584fb0"],
+    ["supabase/people/remove-person.sql", "f48a2386ba60d5b8353cc684891bdc25"],
+    ["supabase/checks/person-removal.sql", "f48a2386ba60d5b8353cc684891bdc25"],
   ])("%s uses the fingerprint block of the checks word for word, and expects the fingerprint %s", (path, fingerprint) => {
     expect(shared).toBeDefined();
     const text = read(path);

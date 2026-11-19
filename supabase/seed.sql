@@ -1,4 +1,4 @@
--- supabase/seed.sql | 213 lines | last line: -- end of seed.sql
+-- supabase/seed.sql | 234 lines | last line: -- end of seed.sql
 -- =============================================================================
 -- Feedbox seed: the invented "Lumen" board from the design brief.
 -- For LOCAL Supabase and feedbox-preview ONLY. Never run it on feedbox-prod.
@@ -15,6 +15,7 @@
 -- * Vote counts match the design exactly: every vote is a real row, so the
 --   counts stay right when someone votes or unvotes. (Posting an idea casts the
 --   author's vote; the other votes come from 213 invented voters.)
+-- * Three messages to the owner (task CT1), where the messages table exists.
 -- * It refuses to run twice: if a board "lumen" exists, it stops and changes
 --   nothing. If the script was pasted twice into one query, the message says
 --   so.
@@ -207,6 +208,26 @@ begin
   where i.vote_count is distinct from li.votes;
   if v_wrong is not null then
     raise exception 'Seed check failed: %', v_wrong;
+  end if;
+
+  -- ---------------------------------------------------------------------------
+  -- Messages to the owner (task CT1), only where the messages migration
+  -- (20261119120000_messages.sql) has run: the tests also seed older states.
+  -- Two unread, one read. The senders' addresses are @lumen.example, so an
+  -- owner's answer can never reach anyone.
+  -- ---------------------------------------------------------------------------
+  if to_regclass('public.messages') is not null then
+    insert into public.messages (board_id, author_id, body, created_at, read_at)
+    values
+      (v_board, md5('lumen-person-mira')::uuid,
+       'Hello! Is there a way to move a whole notebook to another account? I could not find it in the settings.',
+       '2026-11-02 10:15+00', null),
+      (v_board, md5('lumen-person-omar')::uuid,
+       'Please remove my account and everything I posted. Thank you.',
+       '2026-10-28 18:40+00', null),
+      (v_board, md5('lumen-person-tom')::uuid,
+       'Thanks for shipping the Markdown export so quickly.',
+       '2026-10-12 08:05+00', '2026-10-12 09:00+00');
   end if;
 end;
 $seed$;

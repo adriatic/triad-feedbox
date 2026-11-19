@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { boardInitial, viewerStateLabel } from "@/lib/feedbox";
+import { inboxLabel } from "@/lib/messages/core";
 import type { Board, ViewerInfo } from "@/lib/supabase/data";
 import { SignInLink } from "./SignInLink";
 
@@ -14,8 +15,11 @@ import { SignInLink } from "./SignInLink";
  * board's name is not a link; on /changelog the header reads "Lumen
  * Changelog" and has "Back to the board" (Changelog.dc.html) instead of the
  * Changelog link; on /sign-in there is no Sign in button.
+ *
+ * Task CT1: an owner has "Messages", with the number of unread messages when
+ * there are any ("Messages (2)"), except on /messages itself.
  */
-export function Header({ board, viewer }: { board: Board | null; viewer: ViewerInfo }) {
+export function Header({ board, viewer, unreadMessages = 0 }: { board: Board | null; viewer: ViewerInfo; unreadMessages?: number }) {
   const path = usePathname();
   const onBoard = path === "/";
   const onChangelog = path === "/changelog";
@@ -43,6 +47,11 @@ export function Header({ board, viewer }: { board: Board | null; viewer: ViewerI
         {!onChangelog && (
           <Link href="/changelog" className="header-link">
             Changelog
+          </Link>
+        )}
+        {viewer.role === "owner" && path !== "/messages" && (
+          <Link href="/messages" className="header-link header-messages" data-testid="messages-link">
+            {inboxLabel(unreadMessages)}
           </Link>
         )}
         <span className={pillClass} data-testid="viewer-state">

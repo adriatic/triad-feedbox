@@ -244,6 +244,32 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"messages": {
+                  Row: {
+                    "author_id": string,"board_id": string,"body": string,"created_at": string,"id": number,"read_at": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "author_id"?: string,"board_id": string,"body": string,"created_at"?: string,"id"?: never,"read_at"?: string | null
+                  }
+                  Update: {
+                    "author_id"?: string,"board_id"?: string,"body"?: string,"created_at"?: string,"id"?: never,"read_at"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "messages_author_id_fkey"
+      columns: ["author_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "messages_board_id_fkey"
+      columns: ["board_id"]
+isOneToOne: false
+      referencedRelation: "boards"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"profiles": {
                   Row: {
                     "created_at": string,"display_name": string | null,"id": string
@@ -290,7 +316,12 @@ isOneToOne: false
             [_ in never]: never
           }
           Functions: {
-            "board_owner_ids":
+            "board_messages":
+{ Args: { "p_board_id": string }; Returns: {
+              "body": string,"created_at": string,"id": number,"read_at": string,"sender_email": string,"sender_id": string,"sender_name": string
+            }[]
+                           },
+"board_owner_ids":
 { Args: { "p_board_id": string }; Returns: string[]
                            },
 "has_display_name":
@@ -316,6 +347,9 @@ isOneToOne: false
                            },
 "set_idea_status":
 { Args: { "p_idea_id": number,"p_status": Database["public"]['Enums']["idea_status"] }; Returns: undefined
+                           },
+"set_message_read":
+{ Args: { "p_message_id": number,"p_read"?: boolean }; Returns: undefined
                            },
 "similar_ideas":
 { Args: { "p_board_id": string,"p_include_body"?: boolean,"p_limit"?: number,"p_query": string }; Returns: {
