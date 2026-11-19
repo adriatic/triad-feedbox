@@ -1,7 +1,8 @@
 // F4: sign-in by email link, the first-sign-in name, sign-out and the three
 // header states. Runs against LOCAL Supabase only (see e2e/local-supabase.ts).
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { expect, test, type Page } from "@playwright/test";
+// The browser never calls Supabase itself: e2e/fixtures.ts blocks it here too (task F6, A1 finding 4).
+import { expect, test, type Page } from "./fixtures";
 import { localSupabase } from "./local-supabase";
 
 const sb = localSupabase();

@@ -35,8 +35,8 @@ select throws_ok($$ insert into public.votes (idea_id, user_id) values (tests.id
   'permission denied for table votes', 'nobody votes as someone else');
 select throws_ok($$ insert into public.votes (idea_id) values (tests.idea_id('Hidden idea')) $$, '42501',
   'new row violates row-level security policy for table "votes"', 'nobody votes on a hidden idea');
-select throws_ok($$ insert into public.votes (idea_id) values (tests.idea_id('Merged idea')) $$, '42501',
-  'new row violates row-level security policy for table "votes"', 'nobody votes on a merged idea');
+select throws_ok($$ insert into public.votes (idea_id) values (tests.idea_id('Merged idea')) $$, 'P0001',
+  'This idea was just merged into “Idea to vote on”. Vote there.', 'nobody votes on a merged idea, and is told where to vote (task F6b)');
 select throws_ok($$ update public.votes set created_at = now() $$, '42501',
   'permission denied for table votes', 'votes are never changed');
 reset role;
@@ -67,12 +67,21 @@ select results_eq($$ select user_id from public.votes $$, $$ values (tests.id('k
   'a person sees only their own votes, not who else voted');
 reset role;
 
--- Unvoting
+-- Unvoting: only through remove_my_vote (task F6b), which removes the caller's own vote and nobody else's.
 select tests.as_person('sam');
-select results_eq($$ with d as (delete from public.votes where user_id = tests.id('kim') returning 1) select count(*)::int from d $$,
-  $$ values (0) $$, 'nobody removes someone else''s vote');
-select results_eq($$ with d as (delete from public.votes where idea_id = tests.idea_id('Idea to vote on') returning 1) select count(*)::int from d $$,
-  $$ values (1) $$, 'a person removes their own vote (and only theirs)');
+select throws_ok($$ delete from public.votes where idea_id = tests.idea_id('Idea to vote on') $$, '42501', null,
+  'votes are never deleted directly through the API');
+select results_eq($$ select public.remove_my_vote(tests.idea_id('Idea to vote on')) $$,
+  $$ values (true) $$, 'a person removes their own vote (and only theirs)');
+select results_eq($$ select public.remove_my_vote(tests.idea_id('Idea to vote on')) $$,
+  $$ values (false) $$, 'removing it again finds no vote');
+select throws_ok($$ select public.remove_my_vote(tests.idea_id('Merged idea')) $$, 'P0001',
+  'This idea was just merged into “Idea to vote on”. Your vote moved there with it; remove it there if you wish.',
+  'on a merged idea it says where the vote is now');
+reset role;
+select tests.as_visitor();
+select throws_ok($$ select public.remove_my_vote(tests.idea_id('Idea to vote on')) $$, '42501', null,
+  'a visitor cannot call remove_my_vote');
 reset role;
 select results_eq($$ select vote_count from public.ideas where id = tests.idea_id('Idea to vote on') $$,
   $$ values (2) $$, 'removing a vote takes the count down by one (ana and kim remain)');

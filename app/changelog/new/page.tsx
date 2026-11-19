@@ -1,8 +1,11 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
-import { formatDate } from "@/lib/feedbox";
-import { getBoard, getChangelog, getViewer } from "@/lib/supabase/data";
+import { ideasReadyForChangelog } from "@/lib/feedbox";
+import { getBoard, getChangelog, getIdeas, getViewer } from "@/lib/supabase/data";
+import { ChangelogForm } from "./ChangelogForm";
 
-// Write the changelog (owners only). Bare page listing drafts; the editor arrives in F6.
+// The changelog editor (F1 section 8, task F6), for the board's owners. No
+// design exists for it; it reuses the Post an idea layout (PostIdea.dc.html).
 export default async function NewChangelogPage() {
   const board = await getBoard();
   if (!board) {
@@ -16,28 +19,29 @@ export default async function NewChangelogPage() {
   if (viewer.role === "visitor") redirect("/sign-in?next=%2Fchangelog%2Fnew");
   if (viewer.role !== "owner") {
     return (
-      <main className="page">
+      <main className="page page-narrow-top">
+        <Link href="/changelog" className="back-link">
+          &larr; The changelog
+        </Link>
         <h1 className="page-title">Write the changelog</h1>
         <p>Only the owners of {board.name} can write the changelog.</p>
       </main>
     );
   }
-  const { entries } = await getChangelog(board.id);
-  const drafts = entries.filter((e) => e.publishedAt === null);
+  const [ideas, { items }] = await Promise.all([getIdeas(board.id), getChangelog(board.id)]);
+  const ready = ideasReadyForChangelog(ideas, items).map((i) => ({ id: i.id, title: i.title, voteCount: i.voteCount }));
   return (
-    <main className="page">
+    <main className="page page-narrow-top">
+      <Link href="/changelog" className="back-link">
+        &larr; The changelog
+      </Link>
       <h1 className="page-title">Write the changelog</h1>
-      <p>The editor arrives in task F6. Drafts on {board.name}:</p>
-      {drafts.length === 0 ? (
-        <p>No drafts.</p>
+      {ready.length === 0 ? (
+        <p className="empty">
+          No Shipped idea is waiting for the changelog. Move an idea to Shipped with the Owner tools on its page first.
+        </p>
       ) : (
-        <ul>
-          {drafts.map((d) => (
-            <li key={d.id}>
-              {d.title} ({formatDate(d.releasedOn)})
-            </li>
-          ))}
-        </ul>
+        <ChangelogForm ideas={ready} boardName={board.name} />
       )}
     </main>
   );

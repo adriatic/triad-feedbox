@@ -9,7 +9,8 @@
 #
 # It walks the database through the real states (Lumen preview, empty prod,
 # prod after the migration, prod with its board, prod with Nik as its owner,
-# then the O2 migration on prod and on preview), runs every check where it
+# then the O2 migration on prod and on preview, then the F6a migration (the
+# merge log and undo_merge) on prod and on preview), runs every check where it
 # should PASS and where it should FAIL, and every changing script where it
 # should refuse, and confirms that a refusal changed nothing.
 # It resets the local database at the start and at the end.
@@ -94,6 +95,13 @@ reset() { npx supabase db reset "$@" >/dev/null 2>&1 || { echo "db reset failed"
 # The states before task O2 have only the Feedbox v1 migration.
 V1=20261113000000
 reset_v1() { reset --version "$V1" "$@"; }
+# The states before task F6a have the Feedbox v1 and O2 migrations only.
+O2=20261118000000
+reset_o2() { reset --version "$O2" "$@"; }
+# act_as <person handle>: the rest of the query runs as that test person (auth.uid()).
+act_as() {
+  printf '%s' "select set_config('request.jwt.claims', json_build_object('sub', (select id from auth.users where email = '$1@feedbox.test'))::text, true);"
+}
 
 # person <name>: one signed-up person, the way Supabase Auth adds one (the
 # trigger on auth.users creates the profile, with no display name yet).
@@ -109,6 +117,8 @@ person() {
 OWNER=supabase/production/owner-nik.sql
 APPLY_PREVIEW=supabase/apply/preview-board-owner-ids.sql
 APPLY_PROD=supabase/apply/prod-board-owner-ids.sql
+APPLY6A_PREVIEW=supabase/apply/preview-merge-undo.sql
+APPLY6A_PROD=supabase/apply/prod-merge-undo.sql
 
 echo "== A. Local database with the Lumen seed (marker: local), Feedbox v1 migration only"
 reset_v1
@@ -227,6 +237,36 @@ expect_refusal "O2 prod script again" "$(cat $APPLY_PROD)" "already exists"
 expect_refusal "O2 prod script, function dropped and project marked feedbox-preview" "drop function public.board_owner_ids(uuid); update triad.project set name = 'feedbox-preview'; $(cat $APPLY_PROD)" "only for feedbox-prod"
 expect_check prod-board-owner-ids PASS
 
+echo "== G2. feedbox-prod: the F6a migration (the merge log and undo_merge)"
+expect_check prod-merge-undo FAIL
+expect_refusal "F6a preview script in prod" "$(cat $APPLY6A_PREVIEW)" "only for feedbox-preview"
+expect_refusal "F6a prod script, migration changed" "grant insert on public.ideas to anon; $(cat $APPLY6A_PROD)" "does not match the reviewed Feedbox v1 and O2 migrations"
+expect_refusal "F6a prod script without the O2 migration" "drop function public.board_owner_ids(uuid); $(cat $APPLY6A_PROD)" "does not match the reviewed Feedbox v1 and O2 migrations"
+expect_refusal "F6a prod script, no marker" "drop table triad.project; $(cat $APPLY6A_PROD)" "no project marker"
+expect_refusal "F6a prod script pasted twice" "$(twice $APPLY6A_PROD)" "pasted twice into one query. Nothing was changed: the whole query is undone"
+expect_success "F6a prod script" "$(cat $APPLY6A_PROD)"
+expect_check prod-merge-undo PASS
+expect_check preview-merge-undo FAIL
+expect_check prod-merge-undo FAIL "update triad.project set name = 'feedbox-preview'"
+expect_check prod-merge-undo FAIL "grant select on public.idea_merge_votes to authenticated"
+expect_check prod-merge-undo FAIL "grant select on public.idea_merges to anon"
+expect_check prod-merge-undo FAIL "grant insert on public.idea_merges to authenticated"
+expect_check prod-merge-undo FAIL "alter table public.idea_merges disable row level security"
+expect_check prod-merge-undo FAIL "drop policy idea_merges_read_owner on public.idea_merges"
+expect_check prod-merge-undo FAIL "create policy everyone_reads on public.idea_merge_votes for select to authenticated using (true)"
+expect_check prod-merge-undo FAIL "grant execute on function public.undo_merge(bigint) to anon"
+expect_check prod-merge-undo FAIL "alter function public.undo_merge(bigint) reset search_path"
+expect_check prod-merge-undo FAIL "alter function public.merge_ideas(bigint, bigint) security invoker"
+expect_check prod-merge-undo FAIL "alter table public.votes disable trigger votes_refuse_merged"
+expect_check prod-merge-undo FAIL "grant delete on public.votes to authenticated"
+expect_check prod-merge-undo FAIL "revoke execute on function public.remove_my_vote(bigint) from authenticated"
+expect_check prod-merge-undo FAIL "drop function public.undo_merge(bigint)"
+expect_check prod-merge-undo FAIL "grant insert on public.ideas to anon"
+expect_refusal "F6a prod script again" "$(cat $APPLY6A_PROD)" "already exists"
+expect_check prod-merge-undo PASS
+echo "   After F6a the older prod check no longer matches (the fingerprint now includes the merge log):"
+expect_check prod-board-owner-ids FAIL
+
 echo "== H. feedbox-preview (Lumen) before and after the O2 migration"
 reset_v1
 sql "update triad.project set name = 'feedbox-preview'" >/dev/null
@@ -243,12 +283,122 @@ expect_refusal "O2 preview script again" "$(cat $APPLY_PREVIEW)" "already exists
 echo "   After O2 the older checks no longer match (the fingerprint now includes board_owner_ids):"
 expect_check preview-seed FAIL
 
-echo "== I. The local database as supabase db reset builds it (both migrations)"
-reset
+echo "== I. The local database as supabase db reset builds it up to the O2 migration (feedbox-preview before task F6a)"
+reset_o2
 sql "update triad.project set name = 'feedbox-preview'" >/dev/null
 echo "   The migration file gives the same database as the pasted script:"
 expect_check preview-board-owner-ids PASS
 expect_refusal "O2 preview script on the full local database" "$(cat $APPLY_PREVIEW)" "already exists"
+
+echo "== J. feedbox-preview: Nik becomes an owner of lumen (task F6)"
+NIK=supabase/preview/owner-nik.sql
+expect_check preview-owner-nik FAIL
+expect_refusal "preview owner script with no Nik I." "$(cat $NIK)" "no person outside the Lumen people"
+expect_success "Nik signs in on the Preview (test person)" "$(person j-nik)"
+expect_success "Nik sets his display name" "update public.profiles set display_name = 'Nik I.' where id = (select id from auth.users where email = 'j-nik@feedbox.test')"
+expect_refusal "preview owner script, a Lumen person named Nik I. does not count twice" "update public.profiles set display_name = 'Nik I.' where id = (select id from auth.users where email like '%@lumen.example' order by email limit 1); update public.profiles set display_name = 'Nik J.' where id = (select id from auth.users where email = 'j-nik@feedbox.test'); $(cat $NIK)" "no person outside the Lumen people"
+expect_refusal "preview owner script, project marked feedbox-prod" "update triad.project set name = 'feedbox-prod'; $(cat $NIK)" "only for feedbox-preview"
+expect_refusal "preview owner script, migration changed" "grant insert on public.ideas to anon; $(cat $NIK)" "does not match the reviewed Feedbox v1 and O2 migrations"
+expect_refusal "preview owner script, no board lumen" "update public.boards set slug = 'other' where slug = 'lumen'; $(cat $NIK)" "no board"
+expect_refusal "preview owner script, two people named Nik I." "$(person j-nik2); update public.profiles set display_name = 'Nik I.' where id = (select id from auth.users where email = 'j-nik2@feedbox.test'); $(cat $NIK)" "2 people outside the Lumen people"
+expect_refusal "preview owner script pasted twice" "$(twice $NIK)" "pasted twice into one query. Nothing was changed: the whole query is undone"
+expect_check preview-owner-nik FAIL
+expect_success "preview owner script" "$(cat $NIK)"
+expect_check preview-owner-nik PASS
+expect_check preview-owner-nik FAIL "update triad.project set name = 'feedbox-prod'"
+expect_check preview-owner-nik FAIL "delete from public.board_owners where user_id = (select id from auth.users where email = 'j-nik@feedbox.test')"
+expect_check preview-owner-nik FAIL "update public.profiles set display_name = 'Nik J.' where id = (select id from auth.users where email = 'j-nik@feedbox.test')"
+expect_check preview-owner-nik FAIL "insert into public.board_owners (board_id, user_id) select b.id, u.id from public.boards b, auth.users u where b.slug = 'lumen' and u.email = 'sam@lumen.example'"
+expect_check preview-owner-nik FAIL "grant insert on public.ideas to anon"
+expect_check preview-board-owner-ids PASS
+expect_refusal "preview owner script again" "$(cat $NIK)" "already an owner"
+
+echo "== L. feedbox-preview with Nik as owner: the F6a migration (the merge log and undo_merge)"
+expect_check preview-merge-undo FAIL
+expect_refusal "F6a prod script in preview" "$(cat $APPLY6A_PROD)" "only for feedbox-prod"
+expect_refusal "F6a preview script, migration changed" "grant insert on public.ideas to anon; $(cat $APPLY6A_PREVIEW)" "does not match the reviewed Feedbox v1 and O2 migrations"
+expect_refusal "F6a preview script pasted twice" "$(twice $APPLY6A_PREVIEW)" "pasted twice into one query. Nothing was changed: the whole query is undone"
+expect_success "F6a preview script" "$(cat $APPLY6A_PREVIEW)"
+expect_check preview-merge-undo PASS
+expect_check prod-merge-undo FAIL
+expect_check preview-merge-undo FAIL "update triad.project set name = 'feedbox-prod'"
+expect_check preview-merge-undo FAIL "revoke execute on function public.undo_merge(bigint) from authenticated"
+expect_check preview-merge-undo FAIL "drop trigger comments_refuse_merged on public.comments"
+expect_check preview-merge-undo FAIL "insert into public.idea_merges (board_id, source_id, target_id) select i.board_id, i.id, j.id from public.ideas i, public.ideas j where i.title = 'Share a note by link' and j.title = 'Tag notes by colour'"
+expect_refusal "F6a preview script again" "$(cat $APPLY6A_PREVIEW)" "already exists"
+echo "   The pasted functions work: Nik merges two Lumen-like test ideas and undoes it."
+expect_success "Nik posts two test ideas" "insert into public.ideas (board_id, author_id, title) select b.id, u.id, t from public.boards b, auth.users u, unnest(array['L target', 'L source']) t where b.slug = 'lumen' and u.email = 'j-nik@feedbox.test'"
+expect_success "Nik merges them" "$(act_as j-nik) select public.merge_ideas((select id from public.ideas where title = 'L source'), (select id from public.ideas where title = 'L target'))"
+expect_check preview-merge-undo PASS
+expect_success "Nik undoes the merge" "$(act_as j-nik) select public.undo_merge((select max(id) from public.idea_merges))"
+L_STATE=$(sql "select string_agg(title || '=' || vote_count || '/' || coalesce(merged_into_id::text, '-'), ' ' order by title) from public.ideas where title in ('L source', 'L target')")
+if [[ "$L_STATE" == "L source=1/- L target=1/-" ]]; then
+  ok "after the undo both ideas are back as before: $L_STATE"
+else
+  bad "after the undo: $L_STATE (expected L source=1/- L target=1/-)"
+fi
+expect_success "a member signs in (test person)" "$(person l-member)"
+expect_refusal "a member cannot undo a merge" "$(act_as l-member) select public.undo_merge((select max(id) from public.idea_merges))" "Only an owner"
+expect_check preview-merge-undo PASS
+echo "   After F6a the older preview checks no longer match (the fingerprint now includes the merge log):"
+expect_check preview-board-owner-ids FAIL
+expect_check preview-owner-nik FAIL
+
+echo "== K. Removing a person on request (task F6): the template, and a copy for one request"
+REMOVE=supabase/people/remove-person.sql
+COPIES=$(mktemp -d)
+trap 'rm -rf "$COPIES" supabase/checks/zz-person-removal-test.sql' EXIT
+OFFLINE_BASE=$(sql "select vote_count || '/' || comment_count from public.ideas where title = 'Offline mode'")
+# A copy for one request: only the two values in the block "request" change (tests/sql-files.test.ts).
+copy_for() { # <template> <project> <person id> <out>
+  sed -e "s/'none'/'$2'/" -e "s/'00000000-0000-0000-0000-000000000000'/'$3'/" "$1" > "$4"
+}
+expect_success "Del signs in and writes (test person)" "$(person k-del); update public.profiles set display_name = 'Del E.' where id = (select id from auth.users where email = 'k-del@feedbox.test');
+  insert into public.ideas (board_id, author_id, title) select b.id, u.id, 'K idea by Del' from public.boards b, auth.users u where b.slug = 'lumen' and u.email = 'k-del@feedbox.test';
+  insert into public.votes (idea_id, user_id) select i.id, u.id from public.ideas i, auth.users u where i.title = 'Offline mode' and u.email = 'k-del@feedbox.test';
+  insert into public.comments (idea_id, author_id, body) select i.id, u.id, 'K comment by Del' from public.ideas i, auth.users u where i.title = 'Offline mode' and u.email = 'k-del@feedbox.test';
+  insert into public.comments (idea_id, author_id, body) select i.id, u.id, 'K comment by Nik on Del''s idea' from public.ideas i, auth.users u where i.title = 'K idea by Del' and u.email = 'j-nik@feedbox.test'"
+expect_success "Del votes for an idea that Nik then merges (Del's vote is in the merge log)" "insert into public.ideas (board_id, author_id, title) select b.id, u.id, t from public.boards b, auth.users u, unnest(array['K merge target', 'K merge source']) t where b.slug = 'lumen' and u.email = 'j-nik@feedbox.test';
+  insert into public.votes (idea_id, user_id) select i.id, u.id from public.ideas i, auth.users u where i.title = 'K merge source' and u.email = 'k-del@feedbox.test';
+  $(act_as j-nik) select public.merge_ideas((select id from public.ideas where title = 'K merge source'), (select id from public.ideas where title = 'K merge target'))"
+DEL=$(sql "select id from auth.users where email = 'k-del@feedbox.test'")
+copy_for "$REMOVE" feedbox-preview "$DEL" "$COPIES/remove.sql"
+copy_for supabase/checks/person-removal.sql feedbox-preview "$DEL" supabase/checks/zz-person-removal-test.sql
+copy_for "$REMOVE" feedbox-prod "$DEL" "$COPIES/remove-prod.sql"
+expect_refusal "removal template as it is" "$(cat $REMOVE)" "this is the template"
+expect_check person-removal FAIL
+echo "   Before the removal, the copy of the check says what is still there:"
+expect_check zz-person-removal-test FAIL
+expect_refusal "removal copy for feedbox-prod, run in feedbox-preview" "$(cat $COPIES/remove-prod.sql)" "only for feedbox-prod"
+expect_refusal "removal copy, migration changed" "grant insert on public.ideas to anon; $(cat $COPIES/remove.sql)" "does not match the reviewed Feedbox v1, O2 and F6a migrations"
+expect_refusal "removal copy, the person owns a board" "insert into public.board_owners (board_id, user_id) select b.id, '$DEL' from public.boards b where b.slug = 'lumen'; $(cat $COPIES/remove.sql)" "owns 1 board"
+expect_refusal "removal copy, another idea was merged into the person's idea" "insert into public.ideas (board_id, author_id, title) select b.id, u.id, 'K merged into Del' from public.boards b, auth.users u where b.slug = 'lumen' and u.email = 'j-nik@feedbox.test'; update public.ideas set merged_into_id = (select id from public.ideas where title = 'K idea by Del') where title = 'K merged into Del'; $(cat $COPIES/remove.sql)" "merged into ideas by this person"
+expect_refusal "removal copy pasted twice" "$(twice $COPIES/remove.sql)" "pasted twice into one query: then nothing was changed"
+expect_success "removal copy" "$(cat $COPIES/remove.sql)"
+expect_check zz-person-removal-test PASS
+OFFLINE_AFTER=$(sql "select vote_count || '/' || comment_count from public.ideas where title = 'Offline mode'")
+if [[ -n "$OFFLINE_BASE" && "$OFFLINE_AFTER" == "$OFFLINE_BASE" ]]; then
+  ok "the counts follow: Offline mode is back to $OFFLINE_BASE votes/comments without Del's vote and comment"
+else
+  bad "the counts on Offline mode: $OFFLINE_AFTER after the removal (expected $OFFLINE_BASE, as before Del)"
+fi
+expect_check zz-person-removal-test FAIL "update triad.project set name = 'feedbox-prod'"
+MERGE_LEFT=$(sql "select count(*) from public.idea_merge_votes mv join public.idea_merges m on m.id = mv.merge_id join public.ideas s on s.id = m.source_id where s.title = 'K merge source'")
+if [[ "$MERGE_LEFT" == "1" ]]; then
+  ok "the merge log keeps Nik's own vote on the merged idea, and Del's is gone"
+else
+  bad "votes left in the merge log of 'K merge source': $MERGE_LEFT (expected 1, Nik's own)"
+fi
+expect_check preview-merge-undo PASS
+expect_refusal "removal copy again" "$(cat $COPIES/remove.sql)" "no person with the id"
+rm -rf "$COPIES" supabase/checks/zz-person-removal-test.sql
+
+echo "== M. The local database as supabase db reset builds it (all three migrations)"
+reset
+sql "update triad.project set name = 'feedbox-preview'" >/dev/null
+echo "   The migration files give the same database as the pasted scripts:"
+expect_check preview-merge-undo PASS
+expect_refusal "F6a preview script on the full local database" "$(cat $APPLY6A_PREVIEW)" "already exists"
 
 echo "== E. Back to the normal local database"
 reset

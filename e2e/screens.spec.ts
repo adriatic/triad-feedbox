@@ -2,28 +2,14 @@
 // board, tabs, search, sort, an idea, the changelog. Signed in: post an idea
 // with similar ideas, vote twice gives one vote, unvote, comment, and the
 // rate-limit message. Every change is undone by removing the test people.
-import { expect, test, type Page } from "@playwright/test";
-import { admin, apiAs, boardId, ideaId, people, sb, signIn, userId, viewerState, voteCount } from "./helpers";
+import { expect, test, type Page } from "./fixtures";
+import { admin, apiAs, boardId, ideaId, people, signIn, userId, viewerState, voteCount } from "./helpers";
 
 const who = people("screens");
 test.afterAll(() => who.cleanUp());
 
-// Task F5b: the browser never calls Supabase itself. Every read and write goes
-// through the app's server, the path that also works on the hosted Preview
-// (F5's similar ideas, asked from the browser, showed nothing there). Here the
-// browser cannot reach the local Supabase API at all, and any attempt fails
-// the test.
-const browserCalls: string[] = [];
-test.beforeEach(async ({ context }) => {
-  browserCalls.length = 0;
-  await context.route(`${sb.apiUrl}/**`, (route) => {
-    browserCalls.push(route.request().url());
-    return route.abort();
-  });
-});
-test.afterEach(() => {
-  expect(browserCalls, "requests from the browser straight to Supabase").toEqual([]);
-});
+// The browser never calls Supabase itself (task F5b): the fixture in
+// e2e/fixtures.ts blocks it for every test in this file.
 
 const rows = (page: Page) => page.getByTestId("idea-row");
 const titles = (page: Page) => rows(page).locator(".idea-title");

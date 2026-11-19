@@ -3,8 +3,9 @@
 // setting is named in plain words instead of failing somewhere deeper.
 // Only the publishable key is ever read:
 // every rule is enforced by row-level security in the database.
-// NEXT_PUBLIC_* values are inlined into the browser bundle at build time, so
-// they are read with literal names.
+// Only the server reads these settings: the browser never calls Supabase
+// (task F5b). NEXT_PUBLIC_* values are still inlined at build time wherever
+// they are read, so they are read with literal names.
 
 function required(name: string, value: string | undefined): string {
   if (!value) throw new Error(`Missing environment variable ${name}. Set it in Vercel (Settings, Environment Variables) for this environment and build again; see "App settings on Vercel" in CLAUDE.md.`);

@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { isDuplicateVote, isSearchable, refusalMessage, SEARCH_LIMIT, SIMILAR_LIMIT, searchText, type ChangelogEntry, type ChangelogItem, type Idea, type Role, type Viewer } from "@/lib/feedbox";
+import { isDuplicateVote, isSearchable, mergeNotes, refusalMessage, SEARCH_LIMIT, SIMILAR_LIMIT, searchText, type ChangelogEntry, type ChangelogItem, type Idea, type MergeNote, type Role, type Viewer } from "@/lib/feedbox";
 import { boardSlug } from "./env";
 import { createClient } from "./server";
 
@@ -109,6 +109,8 @@ export interface CommentView {
   authorName: string;
   /** True when the author owns the board (see getOwnerIds; shown to every viewer since O2). */
   byOwner: boolean;
+  /** The title of the idea this comment was moved from by a merge (F1 section 5), or null. */
+  movedFrom: string | null;
   body: string;
   createdAt: string;
   hidden: boolean;
@@ -119,16 +121,22 @@ export async function getComments(boardId: string, ideaId: number): Promise<Comm
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("comments")
-    .select("id, author_id, body, created_at, hidden_at")
+    .select("id, author_id, body, created_at, hidden_at, moved_from_idea_id")
     .eq("idea_id", ideaId)
     .order("created_at", { ascending: true })
     .order("id", { ascending: true });
   if (error) throw new Error(`Could not read the comments: ${error.message}`);
-  const [names, owners] = await Promise.all([getDisplayNames(data.map((c) => c.author_id)), getOwnerIds(boardId)]);
+  const movedIds = [...new Set(data.flatMap((c) => (c.moved_from_idea_id === null ? [] : [c.moved_from_idea_id])))];
+  const [names, owners, movedTitles] = await Promise.all([
+    getDisplayNames(data.map((c) => c.author_id)),
+    getOwnerIds(boardId),
+    getIdeaTitles(movedIds),
+  ]);
   return data.map((c) => ({
     id: c.id,
     authorName: names.get(c.author_id) ?? "Someone",
     byOwner: owners.has(c.author_id),
+    movedFrom: c.moved_from_idea_id === null ? null : (movedTitles.get(c.moved_from_idea_id) ?? null),
     body: c.body,
     createdAt: c.created_at,
     hidden: c.hidden_at !== null,
@@ -158,6 +166,47 @@ export async function getOwnerIds(boardId: string): Promise<Set<string>> {
     return new Set();
   }
   return new Set(data ?? []);
+}
+
+/** Titles of ideas by id, as far as this viewer may read them (merged ideas stay readable). */
+export async function getIdeaTitles(ids: readonly number[]): Promise<Map<number, string>> {
+  if (ids.length === 0) return new Map();
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("ideas").select("id, title").in("id", [...ids]);
+  if (error) throw new Error(`Could not read idea titles: ${error.message}`);
+  return new Map(data.map((i) => [i.id, i.title]));
+}
+
+/**
+ * Owners only (task F6a): the ideas merged into this one, each with the merge
+ * in the log that undoes it. Row-level security lets only the board's owners
+ * read the log. If the log cannot be read (for example a database without the
+ * F6a migration), the notes show without Undo merge, and the reason goes to
+ * the server log.
+ */
+export async function getMergeNotes(ideaId: number): Promise<MergeNote[]> {
+  const supabase = await createClient();
+  const [ideas, merges] = await Promise.all([
+    supabase.from("ideas").select("id, title").eq("merged_into_id", ideaId),
+    supabase.from("idea_merges").select("id, source_id").eq("target_id", ideaId).is("undone_at", null),
+  ]);
+  if (ideas.error) throw new Error(`Could not read the merged ideas: ${ideas.error.message}`);
+  if (merges.error) {
+    console.error(`Could not read the merge log (${merges.error.code}): ${merges.error.message}. The notes show without Undo merge.`);
+  }
+  const open = (merges.data ?? []).flatMap((m) => (m.source_id === null ? [] : [{ id: m.id, sourceId: m.source_id }]));
+  return mergeNotes(ideas.data, open);
+}
+
+/** True when the idea is a line in a changelog entry, draft or published (owners read both). */
+export async function isInChangelog(ideaId: number): Promise<boolean> {
+  const supabase = await createClient();
+  const { count, error } = await supabase
+    .from("changelog_items")
+    .select("idea_id", { count: "exact", head: true })
+    .eq("idea_id", ideaId);
+  if (error) throw new Error(`Could not read the changelog lines: ${error.message}`);
+  return (count ?? 0) > 0;
 }
 
 /** The ideas this viewer has voted for (votes are readable by their own person only). */
@@ -223,7 +272,10 @@ export type VoteResult = { ok: true; voted: boolean; count: number } | { ok: fal
  * Vote for an idea, or take the vote back, as the signed-in person; then read
  * the count and the person's own vote back from the database, which is the
  * authority. A second vote is refused by the primary key on votes (23505) and
- * ignored, so a double click or a second tab never counts twice.
+ * ignored, so a double click or a second tab never counts twice. A vote goes
+ * in as a row; a vote is taken back through remove_my_vote, which waits for a
+ * merge or an undo of the idea in progress (task F6b). If the idea was just
+ * merged, the database says so in words, and that is shown as it is.
  */
 export async function setMyVote(ideaId: number, want: boolean): Promise<VoteResult> {
   if (!Number.isSafeInteger(ideaId) || ideaId <= 0) return { ok: false, message: "This idea is no longer on the board." };
@@ -233,7 +285,7 @@ export async function setMyVote(ideaId: number, want: boolean): Promise<VoteResu
   if (!userId) return { ok: false, message: "Your session has ended. Sign in again to vote." };
   const { error: writeError } = want
     ? await supabase.from("votes").insert({ idea_id: ideaId })
-    : await supabase.from("votes").delete().eq("idea_id", ideaId).eq("user_id", userId);
+    : await supabase.rpc("remove_my_vote", { p_idea_id: ideaId });
   if (writeError && !isDuplicateVote(writeError)) {
     return { ok: false, message: refusalMessage(writeError, want ? "Voting" : "Removing your vote") };
   }

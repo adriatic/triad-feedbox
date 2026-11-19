@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { formatDate, formatVotes, publishedChangelog } from "@/lib/feedbox";
 import { StatusChip } from "@/components/StatusChip";
-import { getBoard, getChangelog, getIdeas } from "@/lib/supabase/data";
+import { getBoard, getChangelog, getIdeas, getViewer } from "@/lib/supabase/data";
 
-// The changelog, read only (Changelog.dc.html). Writing it is the owner's editor in F6.
+// The changelog (Changelog.dc.html). Owners also get a link to the editor, /changelog/new (task F6).
 export default async function ChangelogPage() {
   const board = await getBoard();
   if (!board) {
@@ -13,12 +13,19 @@ export default async function ChangelogPage() {
       </main>
     );
   }
-  const [{ entries, items }, ideas] = await Promise.all([getChangelog(board.id), getIdeas(board.id)]);
+  const [{ entries, items }, ideas, viewer] = await Promise.all([getChangelog(board.id), getIdeas(board.id), getViewer(board.id)]);
   const releases = publishedChangelog(entries, items, ideas);
   return (
     <main className="page" style={{ gap: 28 }}>
       <div>
-        <h1 className="page-title">What shipped in {board.name}</h1>
+        <div className="page-title-row">
+          <h1 className="page-title">What shipped in {board.name}</h1>
+          {viewer.role === "owner" && (
+            <Link href="/changelog/new" className="btn btn-primary btn-post">
+              Write a changelog entry
+            </Link>
+          )}
+        </div>
         <p className="muted" style={{ margin: "6px 0 0" }}>
           Every entry started as an idea on the board. Newest first.
         </p>

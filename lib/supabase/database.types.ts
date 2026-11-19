@@ -136,6 +136,76 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"idea_merge_votes": {
+                  Row: {
+                    "added_to_target": boolean,"merge_id": number,"source_voted_at": string,"target_vote_removed_at": string | null,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "added_to_target": boolean,"merge_id": number,"source_voted_at": string,"target_vote_removed_at"?: string | null,"user_id": string
+                  }
+                  Update: {
+                    "added_to_target"?: boolean,"merge_id"?: number,"source_voted_at"?: string,"target_vote_removed_at"?: string | null,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "idea_merge_votes_merge_id_fkey"
+      columns: ["merge_id"]
+isOneToOne: false
+      referencedRelation: "idea_merges"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "idea_merge_votes_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"idea_merges": {
+                  Row: {
+                    "board_id": string,"id": number,"merged_at": string,"merged_by": string | null,"moved_comment_ids": (number)[],"rerouted_idea_ids": (number)[],"source_id": number | null,"target_id": number | null,"undone_at": string | null,"undone_by": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "board_id": string,"id"?: never,"merged_at"?: string,"merged_by"?: string | null,"moved_comment_ids"?: (number)[],"rerouted_idea_ids"?: (number)[],"source_id"?: number | null,"target_id"?: number | null,"undone_at"?: string | null,"undone_by"?: string | null
+                  }
+                  Update: {
+                    "board_id"?: string,"id"?: never,"merged_at"?: string,"merged_by"?: string | null,"moved_comment_ids"?: (number)[],"rerouted_idea_ids"?: (number)[],"source_id"?: number | null,"target_id"?: number | null,"undone_at"?: string | null,"undone_by"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "idea_merges_board_id_fkey"
+      columns: ["board_id"]
+isOneToOne: false
+      referencedRelation: "boards"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "idea_merges_merged_by_fkey"
+      columns: ["merged_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "idea_merges_source_id_fkey"
+      columns: ["source_id"]
+isOneToOne: false
+      referencedRelation: "ideas"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "idea_merges_target_id_fkey"
+      columns: ["target_id"]
+isOneToOne: false
+      referencedRelation: "ideas"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "idea_merges_undone_by_fkey"
+      columns: ["undone_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"ideas": {
                   Row: {
                     "author_id": string,"board_id": string,"body": string,"comment_count": number,"created_at": string,"hidden_at": string | null,"hidden_by": string | null,"id": number,"merged_into_id": number | null,"shipped_at": string | null,"status": Database["public"]['Enums']["idea_status"],"status_changed_at": string,"title": string,"updated_at": string,"vote_count": number
@@ -241,6 +311,9 @@ isOneToOne: false
 "publish_changelog_entry":
 { Args: { "p_entry_id": string,"p_publish"?: boolean }; Returns: undefined
                            },
+"remove_my_vote":
+{ Args: { "p_idea_id": number }; Returns: boolean
+                           },
 "set_idea_status":
 { Args: { "p_idea_id": number,"p_status": Database["public"]['Enums']["idea_status"] }; Returns: undefined
                            },
@@ -248,6 +321,9 @@ isOneToOne: false
 { Args: { "p_board_id": string,"p_include_body"?: boolean,"p_limit"?: number,"p_query": string }; Returns: {
               "id": number,"score": number,"status": Database["public"]['Enums']["idea_status"],"title": string,"vote_count": number
             }[]
+                           },
+"undo_merge":
+{ Args: { "p_merge_id": number }; Returns: number
                            },
 "unhide_comment":
 { Args: { "p_comment_id": number }; Returns: undefined

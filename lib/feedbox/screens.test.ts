@@ -3,10 +3,12 @@ import {
   boardHref,
   boardInitial,
   isDuplicateVote,
+  isMergedRefusal,
   isRateLimited,
   isSearchable,
   paragraphs,
   RATE_LIMIT_MESSAGE,
+  ownerRefusalMessage,
   refusalMessage,
   SIMILAR_DEBOUNCE_MS,
   SIMILAR_MIN_CHARS,
@@ -82,5 +84,49 @@ describe("refusals from the database", () => {
   it("explains a refusal", () => {
     expect(refusalMessage(rateLimit, "Voting")).toBe("You are posting quickly. Try again in a few minutes.");
     expect(refusalMessage({ code: "42501" }, "Voting")).toBe("Voting did not work. Reload the page and try again.");
+  });
+});
+
+describe("owner tools: refusals in words (task F6)", () => {
+  it("says plainly when the person is not an owner (any more)", () => {
+    expect(ownerRefusalMessage({ code: "42501", message: "Only an owner of this board can do this." }, "Hiding the idea"))
+      .toBe("Only an owner of this board can do this. Reload the page: you may have been signed out.");
+  });
+
+  it("says when the idea or comment is gone", () => {
+    expect(ownerRefusalMessage({ code: "P0002", message: "Idea not found." }, "Merging"))
+      .toBe("Merging did not work: it no longer exists. Reload the page.");
+  });
+
+  it("passes on the database's own words when a rule refuses it", () => {
+    expect(ownerRefusalMessage({ code: "23514", message: "This idea is in a changelog entry. Remove it from the entry first." }, "Merging"))
+      .toBe("This idea is in a changelog entry. Remove it from the entry first.");
+  });
+
+  it("falls back to the general message otherwise", () => {
+    expect(ownerRefusalMessage({ code: "XX000", message: "boom" }, "Changing the status")).toBe("Changing the status did not work. Reload the page and try again.");
+  });
+});
+
+describe("a vote, unvote or comment on an idea that was just merged (task F6b)", () => {
+  const merged = {
+    code: "P0001",
+    message: "This idea was just merged into “Sync between two laptops”. Vote there.",
+    details: "merged:6",
+  };
+
+  it("is recognised by the database's detail", () => {
+    expect(isMergedRefusal(merged)).toBe(true);
+    expect(isMergedRefusal({ code: "P0001", message: "x", details: "rate_limit:vote" })).toBe(false);
+    expect(isMergedRefusal(null)).toBe(false);
+  });
+
+  it("shows the database's own words, which say where to go instead", () => {
+    expect(refusalMessage(merged, "Voting")).toBe("This idea was just merged into “Sync between two laptops”. Vote there.");
+  });
+
+  it("never shows another database message as it is", () => {
+    expect(refusalMessage({ code: "42501", message: "new row violates row-level security policy", details: null }, "Voting"))
+      .toBe("Voting did not work. Reload the page and try again.");
   });
 });

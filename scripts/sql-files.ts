@@ -19,7 +19,7 @@ import { basename, join } from "node:path";
  * after it has run on feedbox-preview (Claude.ai, 2026-11-13 9:31 PM), so the
  * Feedbox v1 migration keeps its reviewed text with no header or footer.
  */
-export const PASTED_SQL_DIRS = ["supabase/production", "supabase/apply", "supabase/checks", "supabase/marker"];
+export const PASTED_SQL_DIRS = ["supabase/production", "supabase/apply", "supabase/preview", "supabase/people", "supabase/checks", "supabase/marker"];
 /** Single pasted files. */
 export const PASTED_SQL_FILES = ["supabase/seed.sql"];
 

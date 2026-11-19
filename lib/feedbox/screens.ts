@@ -74,6 +74,16 @@ export function isRateLimited(error: DbError | null | undefined): boolean {
   return (error.details ?? "").startsWith("rate_limit:") || error.message === RATE_LIMIT_MESSAGE;
 }
 
+/**
+ * True when the database refused a vote, an unvote or a comment because the
+ * idea was just merged (task F6b: trigger refuse_merged_idea and
+ * remove_my_vote, detail "merged:<target id>"). Their message is written for
+ * people and names where to go instead, so it is shown as it is.
+ */
+export function isMergedRefusal(error: DbError | null | undefined): boolean {
+  return (error?.details ?? "").startsWith("merged:");
+}
+
 /** True when the database refused a second vote by the same person (primary key on votes). */
 export function isDuplicateVote(error: DbError | null | undefined): boolean {
   return error?.code === "23505";
@@ -82,5 +92,18 @@ export function isDuplicateVote(error: DbError | null | undefined): boolean {
 /** A refusal in words a person can act on. */
 export function refusalMessage(error: DbError, what: string): string {
   if (isRateLimited(error)) return RATE_LIMIT_MESSAGE;
+  if (isMergedRefusal(error) && error.message) return error.message;
   return `${what} did not work. Reload the page and try again.`;
+}
+
+/**
+ * Why an owner tool did not work (task F6), from the owner functions' errors
+ * (migration section 6: 42501 not an owner, P0002 not found, 23514 a rule
+ * refuses it, with a message written for people).
+ */
+export function ownerRefusalMessage(error: DbError, what: string): string {
+  if (error.code === "42501") return "Only an owner of this board can do this. Reload the page: you may have been signed out.";
+  if (error.code === "P0002") return `${what} did not work: it no longer exists. Reload the page.`;
+  if (error.code === "23514" && error.message) return error.message;
+  return refusalMessage(error, what);
 }

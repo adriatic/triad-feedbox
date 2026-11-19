@@ -20,6 +20,7 @@
     "db:stop": "supabase stop --no-backup",
     "test:db": "supabase test db",
     "test:checks": "bash scripts/test-sql-checks.sh",
+    "test:races": "bash scripts/test-races.sh",
     "sql:headers": "node scripts/sql-files.ts --fix",
     "db:types": "supabase gen types typescript --schema public > lib/supabase/database.types.ts.new && (echo '// Generated from the local database by `npm run db:types` (supabase gen types). Do not edit by hand.'; cat lib/supabase/database.types.ts.new) > lib/supabase/database.types.ts && rm lib/supabase/database.types.ts.new",
     "e2e:supabase": "supabase start -x studio,imgproxy,storage-api,realtime,edge-runtime,logflare,vector,postgres-meta,supavisor",

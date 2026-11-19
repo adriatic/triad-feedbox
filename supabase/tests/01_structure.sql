@@ -4,8 +4,9 @@ begin;
 select no_plan();
 
 select tables_are('public',
-  array['boards', 'profiles', 'board_owners', 'ideas', 'votes', 'comments', 'changelog_entries', 'changelog_items'],
-  'Feedbox has exactly these eight tables');
+  array['boards', 'profiles', 'board_owners', 'ideas', 'votes', 'comments', 'changelog_entries', 'changelog_items',
+        'idea_merges', 'idea_merge_votes'],
+  'Feedbox has exactly these ten tables (the merge log since task F6a)');
 
 select ok(c.relrowsecurity, 'row-level security is enabled on ' || c.relname)
 from pg_class c
@@ -40,11 +41,12 @@ select results_eq(
        ('authenticated', 'changelog_items', 'DELETE,SELECT'),
        ('anon', 'comments', 'SELECT'),
        ('authenticated', 'comments', 'SELECT'),
+       ('authenticated', 'idea_merges', 'SELECT'),
        ('anon', 'ideas', 'SELECT'),
        ('authenticated', 'ideas', 'SELECT'),
        ('anon', 'profiles', 'SELECT'),
        ('authenticated', 'profiles', 'SELECT'),
-       ('authenticated', 'votes', 'DELETE,SELECT') $$,
+       ('authenticated', 'votes', 'SELECT') $$,
   'anon and authenticated hold exactly the table privileges of F1 section 3');
 
 select results_eq(
@@ -82,8 +84,10 @@ select results_eq(
        ('anon', 'is_board_owner', true),             ('authenticated', 'is_board_owner', true),
        ('anon', 'merge_ideas', false),               ('authenticated', 'merge_ideas', true),
        ('anon', 'publish_changelog_entry', false),   ('authenticated', 'publish_changelog_entry', true),
+       ('anon', 'remove_my_vote', false),            ('authenticated', 'remove_my_vote', true),
        ('anon', 'set_idea_status', false),           ('authenticated', 'set_idea_status', true),
        ('anon', 'similar_ideas', true),              ('authenticated', 'similar_ideas', true),
+       ('anon', 'undo_merge', false),                ('authenticated', 'undo_merge', true),
        ('anon', 'unhide_comment', false),            ('authenticated', 'unhide_comment', true),
        ('anon', 'unhide_idea', false),               ('authenticated', 'unhide_idea', true) $$,
   'anon may call only the read helpers; owner functions need a signed-in person (and then check ownership)');

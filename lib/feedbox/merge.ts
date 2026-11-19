@@ -4,7 +4,8 @@ type MergeIdea = Pick<Idea, "id" | "boardId" | "mergedIntoId" | "hiddenAt">;
 
 /**
  * Merging duplicates (F1 section 5): the source idea is merged into the target.
- * There is no undo in version 1, so the screen asks for confirmation first.
+ * An owner can undo a merge from the target's page (task F6a, which replaced
+ * decision F1-D8 "no undo in v1"); the screen still asks before merging.
  */
 export function checkMerge(source: MergeIdea, target: MergeIdea): Result {
   if (source.id === target.id) return refuse("An idea cannot be merged into itself.");
@@ -36,4 +37,65 @@ export function mergeVotes(sourceVoters: readonly string[], targetVoters: readon
     }
   }
   return { targetVoters: [...target], added };
+}
+
+export interface MergePreview {
+  /** The target's vote count after the merge is at least this (everyone who voted for the source already voted for the target)... */
+  votesAtLeast: number;
+  /** ...and at most this (nobody voted for both). */
+  votesAtMost: number;
+  /** Comments that move from the source to the target. */
+  commentsMoved: number;
+}
+
+/**
+ * What a merge will do, told before it happens (task F6, F1 section 5). The
+ * screen cannot know how many people voted for both ideas (a person's votes
+ * are readable by that person only), so the target's new count is given as a
+ * range: people who voted for both are counted once. merge_ideas returns the
+ * exact count, which the target's page then shows.
+ */
+export function mergePreview(
+  source: Pick<Idea, "voteCount" | "commentCount">,
+  target: Pick<Idea, "voteCount">,
+): MergePreview {
+  return {
+    votesAtLeast: Math.max(source.voteCount, target.voteCount),
+    votesAtMost: source.voteCount + target.voteCount,
+    commentsMoved: source.commentCount,
+  };
+}
+
+/** The ideas an idea can be merged into: visible, not merged, not the idea itself; best known first. */
+export function mergeTargets<T extends Pick<Idea, "id" | "title" | "voteCount" | "hiddenAt" | "mergedIntoId">>(
+  sourceId: number,
+  ideas: readonly T[],
+): T[] {
+  return ideas
+    .filter((i) => i.id !== sourceId && i.hiddenAt === null && i.mergedIntoId === null)
+    .sort((a, b) => b.voteCount - a.voteCount || a.title.localeCompare(b.title) || a.id - b.id);
+}
+
+/** A note on the target's page, for owners: an idea merged into it, and the merge in the log that undoes it. */
+export interface MergeNote {
+  sourceId: number;
+  title: string;
+  /** The merge in the log (task F6a). Null for a merge made before the log existed: the note shows without Undo merge. */
+  mergeId: number | null;
+}
+
+/**
+ * The notes on a target's page for owners (task F6a): one per idea merged into
+ * it, newest merge first. A merge in the log that is not undone gets its Undo
+ * merge button; an idea merged before the log existed (or merged into an idea
+ * that was then merged here) gets the note only.
+ */
+export function mergeNotes(
+  mergedIdeas: readonly { id: number; title: string }[],
+  openMerges: readonly { id: number; sourceId: number }[],
+): MergeNote[] {
+  const bySource = new Map(openMerges.map((m) => [m.sourceId, m.id]));
+  return mergedIdeas
+    .map((i) => ({ sourceId: i.id, title: i.title, mergeId: bySource.get(i.id) ?? null }))
+    .sort((a, b) => (b.mergeId ?? 0) - (a.mergeId ?? 0) || b.sourceId - a.sourceId);
 }

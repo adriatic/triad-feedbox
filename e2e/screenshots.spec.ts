@@ -11,7 +11,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
-import { ideaId, people, signIn, signInLink, viewerState } from "./helpers";
+import { admin, boardId, ideaId, people, signIn, signInLink, userId, viewerState } from "./helpers";
 
 test.skip(!process.env.F5_SCREENSHOTS, "Screenshots are made only by `npm run screenshots`.");
 test.setTimeout(600_000);
@@ -34,11 +34,15 @@ interface State {
   at: RegExp;
   /** The header's sign-in state the capture must show (default: the person's, from HEADER). */
   header?: string;
+  /** Undoes what open() set up, right after the capture (the page is still open), so no other screen changes. */
+  after?: (page: Page) => Promise<void>;
 }
 
 const HEADER: Record<As, string> = { visitor: "Viewing as visitor", sam: "Signed in as Sam P.", ana: "Signed in as owner" };
 
 const dark = async () => `/ideas/${await ideaId("Dark mode for the editor")}`;
+const EDITOR_IDEAS = ["Weekly backup to a folder", "Print a whole notebook"];
+const MERGED_IDEA = "Night theme for the editor";
 
 const STATES: State[] = [
   { name: "board-visitor", as: "visitor", at: /^\/$/, open: (p) => go(p, "/") },
@@ -60,6 +64,66 @@ const STATES: State[] = [
   { name: "idea-visitor", as: "visitor", at: /^\/ideas\/\d+$/, open: async (p) => go(p, await dark()) },
   { name: "idea-signed-in", as: "sam", at: /^\/ideas\/\d+$/, open: async (p) => go(p, await dark()) },
   { name: "idea-owner", as: "ana", at: /^\/ideas\/\d+$/, open: async (p) => go(p, await dark()) },
+  {
+    // Task F6: the merge panel, open, with a target picked (nothing is merged).
+    name: "idea-owner-merge",
+    as: "ana", at: /^\/ideas\/\d+$/,
+    open: async (p) => {
+      await go(p, await dark());
+      await p.getByRole("button", { name: "Merge into another idea" }).click();
+      await p.getByLabel("Merge “Dark mode for the editor” into").selectOption(String(await ideaId("Offline mode")));
+      await expect(p.getByTestId("merge-preview")).toBeVisible();
+    },
+  },
+  {
+    // Task F6a: the target's page right after a merge, with the note and Undo
+    // merge. A test idea (ana's, with Sam's vote and comment) is merged into
+    // "Dark mode for the editor" through the app, and the merge is undone
+    // through the app after the capture, so the Lumen data is as before.
+    name: "idea-owner-merged",
+    as: "ana", at: /^\/ideas\/\d+\?merged=\d+$/,
+    open: async (p) => {
+      const board = await boardId();
+      const ana = await userId("ana@lumen.example");
+      const sam = await userId("sam@lumen.example");
+      await admin.from("ideas").insert({ board_id: board, author_id: ana, title: MERGED_IDEA }).throwOnError();
+      const source = await ideaId(MERGED_IDEA);
+      await admin.from("votes").insert({ idea_id: source, user_id: sam }).throwOnError();
+      await admin.from("comments").insert({ idea_id: source, author_id: sam, body: "A darker grey would be easier on the eyes at night." }).throwOnError();
+      await go(p, `/ideas/${source}`);
+      await p.getByRole("button", { name: "Merge into another idea" }).click();
+      await p.getByLabel(`Merge “${MERGED_IDEA}” into`).selectOption(String(await ideaId("Dark mode for the editor")));
+      await p.getByRole("button", { name: "Merge into “Dark mode for the editor”" }).click();
+      await expect(p.getByTestId("merged-note").getByRole("button", { name: "Undo merge" })).toBeVisible();
+      await p.evaluate(() => document.fonts.ready);
+    },
+    after: async (p) => {
+      await p.getByTestId("merged-note").filter({ hasText: MERGED_IDEA }).getByRole("button", { name: "Undo merge" }).click();
+      await expect(p.getByTestId("unmerged-note")).toBeVisible();
+      await admin.from("ideas").delete().eq("title", MERGED_IDEA).throwOnError();
+    },
+  },
+  {
+    // Task F6: the changelog editor. Every Shipped idea of the Lumen seed is in
+    // an entry already, so two Shipped ideas are added for this capture only.
+    name: "changelog-new-owner",
+    as: "ana", at: /^\/changelog\/new$/,
+    open: async (p) => {
+      const board = await boardId();
+      const ana = await userId("ana@lumen.example");
+      await admin
+        .from("ideas")
+        .insert(EDITOR_IDEAS.map((title) => ({ board_id: board, author_id: ana, title, status: "shipped" as const })))
+        .throwOnError();
+      await go(p, "/changelog/new");
+      await p.getByLabel("Title").fill("Lumen 2.5");
+      await p.getByLabel("Release date").fill("2026-11-18");
+      await p.getByLabel(`Line for ${EDITOR_IDEAS[0]}`).fill("Lumen copies every notebook to a folder you choose, once a week.");
+    },
+    after: async () => {
+      await admin.from("ideas").delete().in("title", EDITOR_IDEAS).throwOnError();
+    },
+  },
   { name: "post-idea-empty", as: "sam", at: /^\/ideas\/new$/, open: (p) => go(p, "/ideas/new") },
   {
     name: "post-idea-similar",
@@ -103,13 +167,17 @@ const STATES: State[] = [
 ];
 
 /** The six designs and the built screen in the same state (light, the design's own width). */
-const DESIGNS: { file: string; state: string; width: Width; height: number }[] = [
+const DESIGNS: { file: string; state: string; width: Width; height: number; name?: string; task?: string }[] = [
   { file: "Main.dc.html", state: "board-visitor", width: 1280, height: 900 },
-  { file: "Idea.dc.html", state: "idea-owner", width: 1280, height: 980 },
+  { file: "Idea.dc.html", state: "idea-owner", width: 1280, height: 980, task: "F6a" },
+  // Task F6a: the target's page after a merge, with Undo merge; Idea.dc.html has no such note.
+  { file: "Idea.dc.html", state: "idea-owner-merged", width: 1280, height: 980, name: "IdeaMerged", task: "F6a" },
   { file: "PostIdea.dc.html", state: "post-idea-similar", width: 1280, height: 820 },
   { file: "SignIn.dc.html", state: "sign-in", width: 1280, height: 640 },
   { file: "Changelog.dc.html", state: "changelog", width: 1280, height: 800 },
   { file: "BoardPhone.dc.html", state: "board-planned-visitor", width: 390, height: 844 },
+  // Task F6: the changelog editor has no design; it reuses the Post an idea layout.
+  { file: "PostIdea.dc.html", state: "changelog-new-owner", width: 1280, height: 820, name: "ChangelogEditor", task: "F6" },
 ];
 
 async function go(page: Page, url: string) {
@@ -150,6 +218,7 @@ test("screenshots of every screen and state, and the side-by-side images", async
         const file = path.join(OUT, `${state.name}-${scheme}-${width}.png`);
         const png = await page.screenshot({ path: file, fullPage: true, animations: "disabled", caret: "hide" });
         built.set(`${state.name}-${scheme}-${width}`, png);
+        await state.after?.(page);
         await context.close();
       }
     }
@@ -160,8 +229,8 @@ test("screenshots of every screen and state, and the side-by-side images", async
   for (const d of DESIGNS) {
     const design = await drawDesign(browser, d.file, d.width, d.height);
     const screen = built.get(`${d.state}-light-${d.width}`)!;
-    const name = d.file.replace(/\.dc\.html$/, "");
-    writeFileSync(path.join(SIDE_BY_SIDE_DIR, `${name}.png`), await sideBySide(browser, d.file, design, d.state, screen));
+    const name = d.name ?? d.file.replace(/\.dc\.html$/, "");
+    writeFileSync(path.join(SIDE_BY_SIDE_DIR, `${name}.png`), await sideBySide(browser, d.file, design, d.state, screen, d.task ?? "F5"));
   }
 });
 
@@ -182,7 +251,7 @@ async function drawDesign(browser: Browser, file: string, width: number, height:
   return png;
 }
 
-async function sideBySide(browser: Browser, file: string, design: Buffer, state: string, screen: Buffer): Promise<Buffer> {
+async function sideBySide(browser: Browser, file: string, design: Buffer, state: string, screen: Buffer, task: string): Promise<Buffer> {
   const context = await browser.newContext({ viewport: { width: 1200, height: 800 }, colorScheme: "light" });
   const page = await context.newPage();
   const img = (b: Buffer) => `data:image/png;base64,${b.toString("base64")}`;
@@ -190,7 +259,7 @@ async function sideBySide(browser: Browser, file: string, design: Buffer, state:
     <div style="display:flex;gap:24px;align-items:flex-start;padding:24px;width:max-content">
       <figure style="margin:0"><figcaption style="font-weight:600;margin-bottom:8px">Design: design/${file}</figcaption>
         <img src="${img(design)}" style="display:block;border:1px solid #9aa0ab"></figure>
-      <figure style="margin:0"><figcaption style="font-weight:600;margin-bottom:8px">Built (F5): ${state}, light, Lumen data</figcaption>
+      <figure style="margin:0"><figcaption style="font-weight:600;margin-bottom:8px">Built (${task}): ${state}, light, Lumen data</figcaption>
         <img src="${img(screen)}" style="display:block;border:1px solid #9aa0ab"></figure>
     </div></body></html>`);
   await page.waitForFunction(() => [...document.images].every((i) => i.complete));

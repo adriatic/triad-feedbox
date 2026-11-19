@@ -2,7 +2,7 @@
 
 How the parts of Feedbox connect, written from the code at commit `1a13023` (tag `f5`, task A1).
 
-Every statement names the file it comes from, so it can be checked line by line. Line numbers refer to `1a13023`, except in the parts updated by task O2 (the Owner mark for everyone), which say so. Three short names are used throughout:
+Every statement names the file it comes from, so it can be checked line by line. Line numbers refer to `1a13023`, except in the parts updated by task O2 (the Owner mark for everyone) and task F6 (the owner tools and the changelog editor), which name files and functions instead. Three short names are used throughout:
 
 - **the migration** means `supabase/migrations/20261113000000_feedbox_v1.sql`, the Feedbox v1 migration;
 - **the O2 migration** means `supabase/migrations/20261118000000_board_owner_ids.sql` (task O2, decision F5-D1);
@@ -45,7 +45,7 @@ Next.js 16, App Router (`package.json`). It has five kinds of server code:
 | Kind | Files | What it does |
 |---|---|---|
 | Pages (server components) | `app/page.tsx` (the board), `app/ideas/[id]/page.tsx`, `app/ideas/new/page.tsx`, `app/changelog/page.tsx`, `app/changelog/new/page.tsx`, `app/sign-in/page.tsx`, `app/auth/confirm/page.tsx`, `app/welcome/page.tsx`, `app/not-found.tsx`, `app/layout.tsx` | Read from Supabase on the server and render HTML |
-| Server actions (`"use server"`) | `app/ideas/new/actions.ts` (`postIdea`, `findSimilar`), `app/ideas/[id]/actions.ts` (`addComment`), `components/vote-action.ts` (`vote`), `app/sign-in/actions.ts` (`sendLink`), `app/auth/confirm/actions.ts` (`finishSignIn`), `app/welcome/actions.ts` (`saveDisplayName`) | Called by the browser's forms and buttons; they run on the server and call Supabase |
+| Server actions (`"use server"`) | `app/ideas/new/actions.ts` (`postIdea`, `findSimilar`), `app/ideas/[id]/actions.ts` (`addComment`), `app/ideas/[id]/owner-actions.ts` (`changeStatus`, `mergeInto`, `setIdeaHidden`, `setCommentHidden`; task F6; `undoMerge`, task F6a), `app/changelog/new/actions.ts` (`publishEntry`; task F6), `components/vote-action.ts` (`vote`), `app/sign-in/actions.ts` (`sendLink`), `app/auth/confirm/actions.ts` (`finishSignIn`), `app/welcome/actions.ts` (`saveDisplayName`) | Called by the browser's forms and buttons; they run on the server and call Supabase |
 | Route handler | `app/auth/sign-out/route.ts` | `POST` signs out; `GET` answers 405 |
 | Proxy (Next.js 16's name for middleware) | `proxy.ts` | Runs before every page request: refreshes the session cookies and sends a person without a display name to /welcome |
 | Server-side Supabase access | `lib/supabase/server.ts` (the client), data.ts (all reads, and the vote write), `lib/supabase/env.ts` (settings), `lib/supabase/site.ts` (the site's own address) | The only way the app reaches Supabase |
@@ -58,18 +58,23 @@ Next.js 16, App Router (`package.json`). It has five kinds of server code:
 
 Each hosted project has two parts the app uses: Postgres and Supabase Auth.
 
-**Postgres.** Everything is created by the migration, except the function `board_owner_ids`, which the O2 migration adds.
+**Postgres.** Everything is created by the migration, except the function `board_owner_ids`, which the O2 migration adds, and the merge log with `undo_merge`, which the F6a migration (`supabase/migrations/20261118120000_merge_undo.sql`) adds. Line numbers below without a file name are those of the v1 migration.
 
 - **Eight tables** (migration lines 36-148): `boards`, `profiles`, `board_owners`, `ideas`, `votes`, `comments`, `changelog_entries`, `changelog_items`.
+- **The merge log, two tables more** (F6a migration lines 44-71):
+  - `idea_merges`: one row per merge (board, source, target, the owner, the time, the comments it moved, the ideas merged earlier into the source that it pointed at the target, and when and by whom it was undone). Owners of the board read it (policy `idea_merges_read_owner`, line 429); nobody writes it except through `merge_ideas` and `undo_merge`.
+  - `idea_merge_votes`: one row per vote the merge took from the source (who, when they voted, whether the merge added a vote for them on the target, whether they removed their vote on the target since). Nobody reads or writes it through the API, not even an owner, because who voted for what is private (a person reads only their own votes); RLS is on with no policy and no grant. Its rows go with the person (`on delete cascade` on `profiles`).
 - **Row-level security (RLS):** it is on for every table (lines 804-811), with policies at lines 813-928. The grants first revoke everything from `anon` and `authenticated` and then grant back only what is needed, column by column for writes (lines 726-797).
 - **Functions the app may call:**
   - `is_board_owner` (lines 172-185);
   - `has_display_name` (lines 190-203);
   - `similar_ideas` (lines 687-717);
   - `board_owner_ids` (O2 migration lines 21-38): the user ids of one board's owners, and nothing else, for everyone. It is security definer with `search_path` set to `''`, stable, and only `anon` and `authenticated` may execute it (`supabase/tests/11_board_owner_ids.sql`);
-  - the owner functions `set_idea_status`, `merge_ideas`, `hide_idea`, `unhide_idea`, `hide_comment`, `unhide_comment` and `publish_changelog_entry` (lines 463-677).
+  - the owner functions `set_idea_status`, `merge_ideas`, `hide_idea`, `unhide_idea`, `hide_comment`, `unhide_comment` and `publish_changelog_entry` (lines 463-677). Since F6a, `merge_ideas` is the version in the F6a migration (lines 187-274: the same name, arguments, result and rules, and it also writes the merge log);
+  - `undo_merge` (F6a migration lines 293-404), for owners only: see 3.10;
+  - `remove_my_vote` (F6a migration lines 139-180, task F6b): the only way to take a vote back (3.5).
 
-  Today the app calls only `is_board_owner` (data.ts:44), `similar_ideas` (data.ts:173, 199) and, since O2, `board_owner_ids` (`getOwnerIds` in data.ts). The owner functions wait for F6.
+  The app calls `is_board_owner` (data.ts:44), `similar_ideas` (data.ts:173, 199), since O2 `board_owner_ids` (`getOwnerIds` in data.ts), since F6 every owner function, each from one server action (3.10), and since F6a `undo_merge` and a read of `idea_merges` (`getMergeNotes` in data.ts).
 - **Triggers** (lines 235-453):
   - a profile for every new user (5a);
   - rate limits of 5 ideas, 30 comments and 100 votes per person per hour (5b);
@@ -77,8 +82,9 @@ Each hosted project has two parts the app uses: Postgres and Supabase Auth.
   - posting an idea casts the author's vote (5d);
   - `vote_count` follows `votes` (5e);
   - `comment_count` counts visible comments (5f);
-  - changelog lines must name a Shipped idea of the same board (5g).
-- **Helpers in the schema `private`**, which the API does not expose (lines 24-26, 755): `recent_count` and the trigger functions.
+  - changelog lines must name a Shipped idea of the same board (5g);
+  - since F6b, `votes_refuse_merged` and `comments_refuse_merged` (function `private.refuse_merged_idea`, F6a migration lines 78-113): before a vote or a comment is written, they lock the idea's row (key share), so they wait for a merge or an undo of that idea in progress, and then read the idea as it is now. On an idea that was just merged they refuse in words, naming the idea it went into ("This idea was just merged into “<target>”. Vote there." or "… Post your comment there."), with the detail `merged:<id>`. This rule moved here from the policies `votes_insert_own` and `comments_insert_own` (F6a migration lines 117-128), because a policy sees the database as it was when the request started, not after a merge it waited for (section 5, rule 21).
+- **Helpers in the schema `private`**, which the API does not expose (lines 24-26, 755): `recent_count` (the only one `authenticated` may execute; the rate-limit trigger needs it) and the trigger functions.
 - **Project marker:** each project also has a row in `triad.project` that names it (CLAUDE.md, "SQL is code"; `supabase/marker/*.sql`). Only the check scripts and changing scripts read it; the app never does.
 
 **Supabase Auth.**
@@ -236,11 +242,12 @@ flowchart LR
 3. The browser calls the server action `vote(ideaId, want)` (`components/vote-action.ts:9-11`). It is a request to the app's own server, not to Supabase. Task F5b moved it there.
 4. On the server, `setMyVote` (data.ts:218-237) checks the session.
    - **Vote:** it inserts `{ idea_id }`; the voter is `auth.uid()` by default (migration line 100).
-   - **Unvote:** it deletes the person's own row (data.ts:224-226).
+   - **Unvote:** since task F6b it calls `remove_my_vote(idea_id)`; votes are no longer deleted directly through the API (the delete grant and the policy `votes_delete_own` are gone, F6a migration lines 182-183).
 5. The database decides:
    - **One vote:** the primary key `(idea_id, user_id)` allows one vote per person per idea (migration lines 98-103). A second vote fails with code 23505, which `setMyVote` ignores (`isDuplicateVote`, `lib/feedbox/screens.ts:78-80`). So a double click or a second tab never counts twice.
-   - **Who may vote:** the policy `votes_insert_own` requires the person's own vote, a display name, and an idea that is not hidden and not merged (lines 849-858).
-   - **Unvoting:** `votes_delete_own` lets a person remove only their own vote (lines 859-861).
+   - **Who may vote:** the policy `votes_insert_own` requires the person's own vote, a display name, and an idea that is not hidden (F6a migration lines 117-122). That the idea is not merged is checked by the trigger `votes_refuse_merged`, which first waits for a merge or an undo of the idea in progress (1.3; task F6b).
+   - **Unvoting:** `remove_my_vote` removes only the caller's own vote (`auth.uid()`). It locks the idea first, so it waits for a merge or an undo in progress instead of deadlocking with it. On an idea that was just merged it refuses in words: "This idea was just merged into “<target>”. Your vote moved there with it; remove it there if you wish." It also notes in the merge log that the person removed their vote on a merge's target, so an undo does not give it back.
+   - **Words:** a refusal with the detail `merged:` is shown as the database wrote it (`isMergedRefusal` and `refusalMessage` in `lib/feedbox/screens.ts`); every other database error is shown, as before, as "Voting did not work. Reload the page and try again." 
    - **The count:** the rate limit allows 100 votes an hour (5b), and `vote_count` follows the `votes` table (5e).
 6. `setMyVote` then reads the new count and the person's own vote back from the database (data.ts:230-236). The button shows those values, so the database is the authority. A failure is shown in words under the button (`VoteButton.tsx:71-75`).
 
@@ -250,12 +257,14 @@ flowchart LR
 2. **Post comment** calls the server action `addComment` (`app/ideas/[id]/actions.ts:13-27`). It checks the text with `validateComment`, checks the session, and inserts `{ idea_id, body }`.
 3. The database checks:
    - **Grant:** only those two columns (migration line 774).
-   - **Policy `comments_insert_own`:** the author's own comment, a display name, and an idea that is not hidden and not merged (lines 875-884).
+   - **Policy `comments_insert_own`:** the author's own comment, a display name, and an idea that is not hidden (F6a migration lines 123-128). That the idea is not merged is checked by the trigger `comments_refuse_merged`, which first waits for a merge or an undo in progress and then says "This idea was just merged into “<target>”. Post your comment there." (task F6b). The text the person wrote stays in the box.
    - **Text:** 1 to 2000 characters (lines 115-117).
    - **Rate limit:** 30 comments an hour (5b).
    - **Count:** a trigger keeps `comment_count` (5f).
 4. The action refreshes the idea page (`revalidatePath`, line 25). The comments are listed oldest first, flat (data.ts:118-136).
 5. The **Owner** mark appears next to a comment written by an owner of the board, for every viewer: visitors, members and owners (task O2, decision F5-D1). `getOwnerIds` in data.ts asks `board_owner_ids` for the owners' ids; if that fails, for example in a project where the O2 migration has not run yet, the page still loads without the mark and the server logs the reason (`lib/supabase/data.test.ts`). See 3.10.
+6. **Hidden comments (task F6):** an owner has **Hide comment** or **Unhide comment** on every comment (`CommentHideButton` in `app/ideas/[id]/OwnerTools.tsx`, server action `setCommentHidden` in `app/ideas/[id]/owner-actions.ts`, database functions `hide_comment` and `unhide_comment`). A hidden comment is marked "Hidden" for owners; for everyone else RLS leaves it out (migration lines 866-874) and it does not count in `comment_count` (5f).
+7. **Moved comments (task F6):** a comment that a merge moved here reads "From the merged idea “<title>”" (`moved_from_idea_id`, read by `getComments` with `getIdeaTitles` in data.ts).
 
 ### 3.7 Signing in by email link
 
@@ -312,19 +321,53 @@ flowchart LR
 2. `publishedChangelog` (`lib/feedbox/changelog.ts:23-50`) keeps only published entries and orders them newest release first. It drops lines whose idea is hidden and entries left with no lines.
 3. Each release date is a calendar date, shown as written in any time zone (`formatDate`, `lib/feedbox/format.ts:26-31`).
 4. Each line links to its idea. On /changelog the header reads "<board> Changelog" with **Back to the board**, and neither the header nor the footer links to /changelog (`components/Header.tsx:19-55`, `components/Footer.tsx:10-21`).
-5. `/changelog/new` is a bare page for owners that lists drafts. The editor arrives in F6 (`app/changelog/new/page.tsx`).
+5. **Owners** see the button **Write a changelog entry**, which leads to the editor `/changelog/new` (`app/changelog/page.tsx`, task F6). Nobody else sees it.
+6. **The editor** (`app/changelog/new/page.tsx` and `ChangelogForm.tsx`, task F6; no design exists, so it reuses the Post an idea layout):
+   - a visitor is sent to sign in; a member reads "Only the owners of <board> can write the changelog.";
+   - it offers the Shipped, visible, unmerged ideas that are in no entry yet (`ideasReadyForChangelog`, `lib/feedbox/changelog.ts`), all ticked, each with one line to write; the release date starts as the owner's own today;
+   - **Publish** calls the server action `publishEntry` (`app/changelog/new/actions.ts`). It checks the title, date and lines with the core library (`validateChangelogTitle`, `validateReleaseDate`, `validateChangelogNote`, `checkChangelogPicks`), then, with the owner's session, inserts the entry (policy `changelog_entries_insert_owner`), its lines (policy `changelog_items_insert_owner`; the trigger 5g accepts only Shipped ideas of the same board), and calls `publish_changelog_entry`;
+   - these are three requests, not one transaction: if a later one fails, the action deletes the entry it made (policy `changelog_entries_delete_owner`; its lines go with it), so no half-made draft stays;
+   - afterwards the owner lands on `/changelog`, where the entry shows at once.
 
-### 3.10 What an owner sees today
+### 3.10 What an owner sees and does
 
 1. **Who is an owner:** a person listed in `board_owners` for this board. Rows are added by reviewed SQL only, for example `supabase/production/owner-nik.sql`; there is no insert policy (migration lines 828-832). `getViewer` calls `is_board_owner` (data.ts:43-46).
 2. **The header** reads "Signed in as owner" (`viewerStateLabel`, `lib/feedbox/permissions.ts:49-53`).
-3. **Hidden ideas and comments:** an owner also sees them, marked "Hidden" (`app/page.tsx:36, 99`; `app/ideas/[id]/page.tsx:30, 51, 74`).
+3. **Hidden ideas and comments:** an owner also sees them, marked "Hidden", in the board's lists and on the idea page (`app/page.tsx:36, 99`; `app/ideas/[id]/page.tsx`). Visitors and members never see them: RLS does not return them, and a hidden idea's page answers "This page could not be found." (`canSeeIdea`, `lib/feedbox/permissions.ts`).
    - RLS lets owners read them (migration lines 836-838, 866-874).
    - Search and similar ideas still leave hidden ideas out (`similar_ideas`, line 713).
 4. **The Owner mark:** since task O2 (decision F5-D1, decided by Nik on 2026-11-18), everyone sees **Owner** next to comments written by any owner of the board, not only owners.
    - The ids come from the function `board_owner_ids` (O2 migration lines 21-38), which returns the owners' user ids only, never an email or another column (`supabase/tests/11_board_owner_ids.sql`; `e2e/screens.spec.ts`, "everyone sees the Owner mark").
    - The table `board_owners` and its policy `board_owners_read` are unchanged: reading the table directly, an owner sees all owners of the board and anyone else at most their own row (migration lines 830-832).
-5. **No owner tools in the app yet:** the database already has the owner functions (status, merge, hide and unhide, publish), but no page calls them. They arrive in F6.
+5. **The Owner tools** (task F6, as in `Idea.dc.html`): on every idea page an owner sees the box **Owner tools** (`OwnerTools` in `app/ideas/[id]/OwnerTools.tsx`). Visitors and members never get it: the page renders it only for the role `owner`, and every function behind it checks `is_board_owner` again (42501 otherwise). Each tool is a form that calls one server action in `app/ideas/[id]/owner-actions.ts`, which calls one owner function with the owner's own session; the browser never calls Supabase. Refusals come back in words (`ownerRefusalMessage`, `lib/feedbox/screens.ts`: the database's own message for 23514).
+   - **Status:** a list of Open, Planned, Building and Shipped and **Change status** → `changeStatus` → `set_idea_status`. Any change but "the same again" is allowed; an idea in a changelog entry stays Shipped, so the list is disabled with a note (`isInChangelog` in data.ts; trigger 5c in the database).
+   - **Merge into another idea:** opens a panel. The owner picks the target from the visible, unmerged ideas (`mergeTargets`, `lib/feedbox/merge.ts`), and the panel says what will happen before the button: the target's new vote count as a range, since a person's votes are readable only by that person (`mergePreview`), the comments that move, that the idea leaves the board, and then plainly "Merge “<source>” into “<target>”? You can undo this from that idea's page." (task F6a; until then it said "There is no undo"). The button → `mergeInto` → `merge_ideas` (F6a migration lines 187-274): the merge log written first, votes copied without double counting, comments moved with `moved_from_idea_id`, the idea marked `merged_into_id`.
+   - **After a merge:** the owner lands on the target at `/ideas/<target>?merged=<source>`, which says "“<source>” was merged into this idea. Its votes and comments are here now: N votes in all." The source's own address leads there too (a temporary redirect, since a merge can be undone); for visitors and members the note shows only on that address, and only when the source really was merged into this idea.
+   - **Undo merge (task F6a, replaces decision F1-D8 "no undo in v1"):** on the target's page an owner always sees one note per idea merged into it ("“<source>” was merged into this idea.", `getMergeNotes` and `mergeNotes`, `lib/feedbox/merge.ts`), newest first. A merge in the log that is not undone has an **Undo merge** button → `undoMerge` → `undo_merge`. Afterwards the owner stays on the target at `/ideas/<target>?unmerged=<source>`, which says "Merge undone: “<source>” is back on the board, with N votes and M comments." with a link to it, and the note is gone.
+     - What the undo does: the source is back on the board as it was (same row, address, title, details, author, date and status); ideas merged into it before point at it again; everyone whose vote the merge took counts on it again; the target loses the votes the merge added; a person who had voted for both keeps a vote on each; the moved comments go back with the mark they had before.
+     - What happened in between stays where it was made: a new vote or comment on the target stays; a person who removed their vote on the target since gets it back on neither idea (noted by `remove_my_vote`).
+     - Two merges into one target, the older undone first: a vote that the newer merge also needed stays on the target, and from then on belongs to the newer merge, whose own undo takes it.
+     - Refusals, in words, with nothing changed: not an owner (42501); already undone; the merged idea or the target no longer exists; the target has itself been merged since ("Undo that merge first"); the source is no longer merged into the target.
+     - Merges made before the F6a migration have no log row: their note stays, without the Undo merge button. So does the note for an idea that was merged into another idea that was then merged here; it can be undone in turn once that later merge is undone.
+   - **At the same moment as other people (task F6b).** `merge_ideas` and `undo_merge` lock every idea they change in one statement, in id order (F6a migration lines 206-208 and 325-327); a vote, a comment and `remove_my_vote` lock their idea first. So whoever comes second waits for whoever came first, then sees what the first one did. Each case runs in two database sessions at the same time in `scripts/test-races.sh` (`npm run test:races`, CI job `db`):
+
+     | Case | What happens | Test |
+     |---|---|---|
+     | A vote on the merged idea while the merge runs | Waits; then refused: "This idea was just merged into “<target>”. Vote there." Nothing is written | a1 |
+     | An unvote on the merged idea while the merge runs | Waits; then refused: "… Your vote moved there with it; remove it there if you wish." The vote is on the target, counted once | a2 |
+     | A comment on the merged idea while the merge runs | Waits; then refused: "… Post your comment there." Nothing is written; the text stays in the box | b |
+     | A comment on the target while a merge runs | Waits; then written on the target | b2 |
+     | A vote on the target while an undo runs | Waits; then written on the target, where it stays | c1 |
+     | An unvote on the target while an undo runs, the undo first | The undo takes the vote the merge added and gives the person's vote back on the other idea; the unvote then finds nothing to remove there | c2 |
+     | The same, the unvote first | Removed in the meantime: the undo gives it back on neither idea | c3 |
+     | A vote, or comments, on the merged idea while the undo runs | Wait; then written on the idea that is back, where they stay | c4, c5 |
+     | Two owners merge the same idea into two others | The second is told "This idea has already been merged."; merged once, one log row | d1 |
+     | Two owners undo the same merge | The second is told "This merge has already been undone."; undone once | d2 |
+     | An undo while its target is merged into a third idea | In the order they came: the merge first, then the undo is refused in words ("Undo that merge first"); or the undo first, then the merge goes through without the idea that is back | d3, d4, d6, d7 |
+     | An undo and a merge that both touch an idea merged earlier, or queue behind a third request | No deadlock: both lock in id order | d5, d6, d7 (before F6b, d7 ended in "deadlock detected") |
+   - **Hide idea / Unhide idea:** → `setIdeaHidden` → `hide_idea` or `unhide_idea`.
+6. **The changelog editor:** see 3.9.
+7. **Guarded by:** `scripts/test-races.sh` (task F6b, the table above), `e2e/owner.spec.ts` (status, merge with its counts, undo of a merge with every idea, vote and comment as before, hide and unhide of an idea and a comment, publishing; a member and a visitor never see the panel, Undo merge, the hidden items or the editor) and, in the database, `supabase/tests/06_owner_functions.sql`, `07_merge.sql`, `08_changelog.sql` and `12_merge_undo.sql` (task F6a: the log, the undo, the in-between cases, two merges into one target, refusals, who may read and write the log).
 
 ## 4. Keys: which key is used where
 
@@ -348,7 +391,7 @@ Each rule names the test or check that guards it.
 
 | # | Never… | Guarded by |
 |---|---|---|
-| 1 | The browser never calls Supabase itself; every read and write goes through the app's server | `e2e/screens.spec.ts:11-26`: every test in that file aborts and records any browser request to the local Supabase API, and fails if there was one (task F5b). `lib/supabase/env.test.ts:31` checks that only `env.ts` reads the Supabase settings |
+| 1 | The browser never calls Supabase itself; every read and write goes through the app's server | `e2e/fixtures.ts` (since task F6; before, only `e2e/screens.spec.ts`): every test in `auth.spec.ts`, `owner.spec.ts` and `screens.spec.ts` aborts and records any browser request to the local Supabase API, and fails if there was one (task F5b). `lib/supabase/env.test.ts` checks that only `env.ts` reads the Supabase settings |
 | 2 | No secret key in the app, on the Mac or in a commit | CLAUDE.md, "Three rules" 1 and 3; `.gitignore` excludes every `.env*`; `e2e/local-supabase.ts:26-28` refuses any Supabase address but 127.0.0.1 |
 | 3 | A table never goes without row-level security, and anon and authenticated never get more than the listed grants | `supabase/tests/01_structure.sql`: RLS on every table, exact table and column privileges, and `search_path=''` on every security definer function |
 | 4 | Never more than one vote per person per idea | The primary key on `votes` (migration lines 98-103); `supabase/tests/04_votes.sql` (a second vote fails with 23505; nobody votes as someone else); `e2e/screens.spec.ts:288` (a double click, a reload and a second insert through the API give one vote) |
@@ -364,6 +407,11 @@ Each rule names the test or check that guards it.
 | 14 | A profile never holds an email address, and a display name never contains "@" | `profiles` has no email column; check `profiles_display_name_check` (migration lines 53-59); `supabase/tests/01_structure.sql`; `e2e/auth.spec.ts:68` |
 | 15 | A migration is never edited after it ran on feedbox-preview | `tests/sql-files.test.ts:68-74` pins the file's sha256 |
 | 16 | The tests never touch a hosted project | `e2e/local-supabase.ts:26-28`; `ci.yml` (no secrets; local Supabase only); CLAUDE.md, "Three rules" 2 |
+| 17 | Only an owner of the board changes a status, merges or undoes a merge, hides or unhides, or publishes the changelog, and only through the owner functions | The functions check `is_board_owner` (migration section 6; `undo_merge` in the F6a migration); no grant lets anyone write `status`, `merged_into_id`, `hidden_at` or `published_at` (rule 5), or either merge log table; the app calls them only from server actions; `supabase/tests/06_owner_functions.sql`, `07_merge.sql`, `08_changelog.sql`, `12_merge_undo.sql`; `e2e/owner.spec.ts` |
+| 18 | Visitors and members never see the Owner tools, hidden ideas or comments, or the changelog editor | RLS (migration lines 836-838, 866-874, 888-890); the pages render the tools only for owners; `e2e/owner.spec.ts` (task F6) |
+| 19 | A person becomes an owner, or is removed, only by a reviewed script, never from the app | No insert policy on `board_owners`; `supabase/production/owner-nik.sql`, `supabase/preview/owner-nik.sql`, `supabase/people/remove-person.sql`, each with its check and tested in `scripts/test-sql-checks.sh`; a removal copy may change only its block "request" (`tests/sql-files.test.ts`) |
+| 20 | A wrong merge never needs SQL to repair: an owner undoes it from the app, and nobody, not even an owner, reads who voted from the merge log | `undo_merge` (F6a migration); RLS on `idea_merges` (owners read) and `idea_merge_votes` (nobody); `supabase/tests/12_merge_undo.sql`; `supabase/checks/<project>-merge-undo.sql` rows 4-6; `e2e/owner.spec.ts` (task F6a) |
+| 21 | A vote, unvote or comment is never lost or counted twice because a merge or an undo of its idea runs at the same moment: it waits, then either goes through where it was made or is refused in words that say where to go; two owners never deadlock | Trigger `refuse_merged_idea` and `remove_my_vote` lock the idea first; `merge_ideas` and `undo_merge` lock every idea they change in one statement in id order (F6a migration, task F6b); `scripts/test-races.sh` (two sessions at the same time, cases a1-d7; CI job `db`); `supabase/tests/04_votes.sql`, `05_comments.sql`; `supabase/checks/<project>-merge-undo.sql` row 7 |
 
 ## 6. Where settings live
 
@@ -373,17 +421,23 @@ Each rule names the test or check that guards it.
   - `NEXT_PUBLIC_SITE_URL` is optional, read in `lib/supabase/site.ts:10`.
   - In Vercel they are set per environment (CLAUDE.md, "App settings on Vercel"). Locally and in CI they come from `npx supabase status` (`playwright.config.ts:30-34`).
 - **Local Supabase settings:** `supabase/config.toml`. Where they differ from hosted, the difference is on purpose (CLAUDE.md, "Local Supabase against these settings").
-- **SQL that Nik runs on a hosted project:** files in `supabase/checks/`, `supabase/marker/`, `supabase/production/` and, since task O2, `supabase/apply/` (a migration as Nik pastes it, guarded by the project marker), each reviewed and tested (CLAUDE.md, "SQL is code").
+- **SQL that Nik runs on a hosted project:** files in `supabase/checks/`, `supabase/marker/`, `supabase/production/`, since task O2 `supabase/apply/` (a migration as Nik pastes it, guarded by the project marker), and since task F6 `supabase/preview/` (scripts for feedbox-preview only), since task F6a `supabase/apply/<project>-merge-undo.sql`, and `supabase/people/` (removing a person on request: a template, copied per request), each reviewed and tested (CLAUDE.md, "SQL is code").
 
 ## 7. Not built yet, and open decisions
 
-**Not built yet (task F6):**
-- The owner tools on the idea page: change status, merge, hide and unhide ideas and comments (`app/ideas/[id]/page.tsx:11`).
-- The changelog editor (`app/changelog/new/page.tsx:5, 30`).
+**Built in task F6:** the owner tools on the idea page and the changelog editor (3.6, 3.9, 3.10).
 
-The database functions for all of these exist (migration lines 457-677) and are tested (`supabase/tests/06_owner_functions.sql`, `07_merge.sql`, `08_changelog.sql`).
+**Built in task F6a:** undoing a merge from the app (3.10), with the merge log (1.3).
 
-**Decisions** (from the F5 and A1 reports):
+**Built in task F6b:** merges and undos while other people vote, unvote and comment, and two owners at the same moment (3.5, 3.6, 3.10 "At the same moment", rule 21). Asked by Nik, TRIAD chat, 2026-11-18 6:19 PM. Decision **F1-D8** ("no undo in v1") is replaced: Nik, TRIAD chat, 2026-11-18 5:54-6:06 PM, after running F6 on the Preview: an owner can undo any merge from the app, and a wrong merge never needs SQL.
+
+**Not built in version 1 (F1, section 11):** CAPTCHA, many boards per deployment, and editing or unpublishing a changelog entry in the app (the database allows both for owners; no screen offers them). The check of the hosted Preview is task P1.
+
+**Decisions** (from the F5, A1, F6 and F6a reports):
 - **F5-D1 (decided 2026-11-18, done in task O2):** everyone may read who the board's owners are, so the Owner mark shows for every viewer (see 3.6 and 3.10).
 - **F5-D2 (open):** whether to build an end-to-end runner against the hosted Preview (`playwright.config.ts:4-7`).
-- **A1-D2 (decided 2026-11-18, fixed later):** the search limit of 20 applies to the whole board before the tab is chosen (see 3.2); it is fixed later, with F6's database work or when a board grows, not now.
+- **A1-D2 (decided 2026-11-18, fixed later):** the search limit of 20 applies to the whole board before the tab is chosen (see 3.2); it is fixed later, with F6's database work or when a board grows, not now. F6 needed no database change; see the F6 report, decision F6-D2.
+- **F6-D1 (recorded in task F6a; Nik did not answer, Claude.ai took the recommendation, Nik may change it):** owners do not find hidden ideas by the board's search; they find them in the tab lists, and never in similar ideas (`similar_ideas` leaves them out, migration line 713).
+- **F6-D2 (recorded in task F6a, the same way):** the search limit of 20 (A1-D2) is not fixed now.
+- **F6-D3 (recorded in task F6a, the same way):** the merge panel keeps the vote count as a range.
+- **F6-D4 (open):** whether a removal copy may name the person's User UID in this public repository.
