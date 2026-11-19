@@ -935,13 +935,9 @@ textarea {
 .merge-preview .label {
   margin: 0;
 }
-.merge-warning {
+.merge-question {
   margin: 10px 0 0;
   font-weight: 600;
-  color: var(--alert-fg);
-  background: var(--alert-bg);
-  border-radius: 8px;
-  padding: 8px 12px;
 }
 .link-button {
   background: none;
@@ -981,6 +977,27 @@ textarea {
   color: var(--planned-fg);
   border-radius: 10px;
   padding: 10px 14px;
+}
+/* The note on a target's page for owners, with Undo merge (task F6a). */
+.merged-note-owner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.merged-note-owner p {
+  margin: 0;
+}
+.undo-merge {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.unmerged-note a {
+  color: inherit;
+  font-weight: 600;
 }
 
 /* ---- Changelog editor (/changelog/new, task F6): the Post an idea layout ---- */

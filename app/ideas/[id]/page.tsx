@@ -4,22 +4,22 @@ import { boardHref, can, canSeeIdea, canVoteOn, formatComments, formatVotes, mer
 import { LocalDate } from "@/components/LocalDate";
 import { StatusChip } from "@/components/StatusChip";
 import { VoteButton } from "@/components/VoteButton";
-import { getBoard, getComments, getDisplayNames, getIdea, getIdeas, getMyVotes, getViewer, isInChangelog } from "@/lib/supabase/data";
+import { getBoard, getComments, getDisplayNames, getIdea, getIdeas, getMergeNotes, getMyVotes, getViewer, isInChangelog } from "@/lib/supabase/data";
 import { CommentForm } from "./CommentForm";
-import { CommentHideButton, OwnerTools } from "./OwnerTools";
+import { CommentHideButton, OwnerTools, UndoMergeButton } from "./OwnerTools";
 
 // Idea detail (Idea.dc.html): vote, comments (flat, newest last), the comment box,
 // and for owners the Owner tools (task F6): status, merge, hide or unhide the idea
-// and each comment.
+// and each comment; and on a merge's target, Undo merge (task F6a).
 export default async function IdeaPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ merged?: string | string[] }>;
+  searchParams: Promise<{ merged?: string | string[]; unmerged?: string | string[] }>;
 }) {
   const { id: raw } = await params;
-  const { merged: rawMerged } = await searchParams;
+  const { merged: rawMerged, unmerged: rawUnmerged } = await searchParams;
   if (!/^[1-9]\d{0,15}$/.test(raw)) notFound();
   const board = await getBoard();
   if (!board) notFound();
@@ -27,21 +27,27 @@ export default async function IdeaPage({
   const viewer = await getViewer(board.id);
   if (!idea || !canSeeIdea(viewer, idea)) notFound();
   // A merged idea's address leads to the idea it was merged into, which says so
-  // (F1 section 5). Not a permanent redirect: a wrong merge can be repaired by hand.
+  // (F1 section 5). Not a permanent redirect: an owner can undo the merge (task F6a).
   if (idea.mergedIntoId !== null) redirect(`/ideas/${idea.mergedIntoId}?merged=${idea.id}`);
 
   const isOwner = viewer.role === "owner";
-  const mergedId = typeof rawMerged === "string" && /^[1-9]\d{0,15}$/.test(rawMerged) ? Number(rawMerged) : null;
-  const [names, comments, myVotes, mergedSource, inChangelog, boardIdeas] = await Promise.all([
+  const idParam = (raw: string | string[] | undefined) => (typeof raw === "string" && /^[1-9]\d{0,15}$/.test(raw) ? Number(raw) : null);
+  const mergedId = idParam(rawMerged);
+  const unmergedId = isOwner ? idParam(rawUnmerged) : null;
+  const [names, comments, myVotes, mergedSource, inChangelog, boardIdeas, notes, unmergedSource] = await Promise.all([
     getDisplayNames([idea.authorId]),
     getComments(board.id, idea.id),
     getMyVotes(viewer, [idea.id]),
     mergedId === null ? Promise.resolve(null) : getIdea(board.id, mergedId),
     isOwner ? isInChangelog(idea.id) : Promise.resolve(false),
     isOwner ? getIdeas(board.id) : Promise.resolve([]),
+    isOwner ? getMergeNotes(idea.id) : Promise.resolve([]),
+    unmergedId === null ? Promise.resolve(null) : getIdea(board.id, unmergedId),
   ]);
   // The note only for an idea that really was merged into this one.
   const mergedNote = mergedSource && mergedSource.mergedIntoId === idea.id ? mergedSource.title : null;
+  // After Undo merge (owners only): the idea that is back on the board.
+  const backOnBoard = unmergedSource && unmergedSource.mergedIntoId === null ? unmergedSource : null;
   const signedIn = viewer.role !== "visitor";
   const body = paragraphs(idea.body);
   const shownComments = comments.filter((c) => !c.hidden || isOwner);
@@ -52,13 +58,31 @@ export default async function IdeaPage({
       <Link href={boardHref({ tab: idea.status, sort: "top" })} className="back-link">
         &larr; All ideas
       </Link>
-      {mergedNote && (
-        <p className="merged-note" role="status" data-testid="merged-note">
-          &ldquo;{mergedNote}&rdquo; was merged into this idea. Its votes and comments are here now: {formatVotes(idea.voteCount)} in all.
+      {backOnBoard && (
+        <p className="merged-note unmerged-note" role="status" data-testid="unmerged-note">
+          Merge undone: &ldquo;{backOnBoard.title}&rdquo; is back on the board, with {formatVotes(backOnBoard.voteCount)} and{" "}
+          {formatComments(backOnBoard.commentCount)}. <Link href={`/ideas/${backOnBoard.id}`}>Open &ldquo;{backOnBoard.title}&rdquo;</Link>
         </p>
       )}
+      {isOwner
+        ? notes.map((n) => (
+            <div key={n.sourceId} className="merged-note merged-note-owner" data-testid="merged-note">
+              <p role="status">
+                &ldquo;{n.title}&rdquo; was merged into this idea.
+                {n.sourceId === mergedId && <> Its votes and comments are here now: {formatVotes(idea.voteCount)} in all.</>}
+              </p>
+              {n.mergeId !== null && <UndoMergeButton mergeId={n.mergeId} ideaId={idea.id} sourceId={n.sourceId} />}
+            </div>
+          ))
+        : mergedNote && (
+            <p className="merged-note" role="status" data-testid="merged-note">
+              &ldquo;{mergedNote}&rdquo; was merged into this idea. Its votes and comments are here now: {formatVotes(idea.voteCount)} in all.
+            </p>
+          )}
       <article className="card idea-article">
+        {/* Keyed by the count: after Undo merge the page reloads at the same address, and the button must start from the new count. */}
         <VoteButton
+          key={`${idea.id}-${idea.voteCount}`}
           ideaId={idea.id}
           title={idea.title}
           initial={{ voted: myVotes.has(idea.id), count: idea.voteCount }}

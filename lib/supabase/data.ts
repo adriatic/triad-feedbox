@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { isDuplicateVote, isSearchable, refusalMessage, SEARCH_LIMIT, SIMILAR_LIMIT, searchText, type ChangelogEntry, type ChangelogItem, type Idea, type Role, type Viewer } from "@/lib/feedbox";
+import { isDuplicateVote, isSearchable, mergeNotes, refusalMessage, SEARCH_LIMIT, SIMILAR_LIMIT, searchText, type ChangelogEntry, type ChangelogItem, type Idea, type MergeNote, type Role, type Viewer } from "@/lib/feedbox";
 import { boardSlug } from "./env";
 import { createClient } from "./server";
 
@@ -175,6 +175,27 @@ export async function getIdeaTitles(ids: readonly number[]): Promise<Map<number,
   const { data, error } = await supabase.from("ideas").select("id, title").in("id", [...ids]);
   if (error) throw new Error(`Could not read idea titles: ${error.message}`);
   return new Map(data.map((i) => [i.id, i.title]));
+}
+
+/**
+ * Owners only (task F6a): the ideas merged into this one, each with the merge
+ * in the log that undoes it. Row-level security lets only the board's owners
+ * read the log. If the log cannot be read (for example a database without the
+ * F6a migration), the notes show without Undo merge, and the reason goes to
+ * the server log.
+ */
+export async function getMergeNotes(ideaId: number): Promise<MergeNote[]> {
+  const supabase = await createClient();
+  const [ideas, merges] = await Promise.all([
+    supabase.from("ideas").select("id, title").eq("merged_into_id", ideaId),
+    supabase.from("idea_merges").select("id, source_id").eq("target_id", ideaId).is("undone_at", null),
+  ]);
+  if (ideas.error) throw new Error(`Could not read the merged ideas: ${ideas.error.message}`);
+  if (merges.error) {
+    console.error(`Could not read the merge log (${merges.error.code}): ${merges.error.message}. The notes show without Undo merge.`);
+  }
+  const open = (merges.data ?? []).flatMap((m) => (m.source_id === null ? [] : [{ id: m.id, sourceId: m.source_id }]));
+  return mergeNotes(ideas.data, open);
 }
 
 /** True when the idea is a line in a changelog entry, draft or published (owners read both). */

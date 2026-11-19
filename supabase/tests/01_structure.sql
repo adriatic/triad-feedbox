@@ -4,8 +4,9 @@ begin;
 select no_plan();
 
 select tables_are('public',
-  array['boards', 'profiles', 'board_owners', 'ideas', 'votes', 'comments', 'changelog_entries', 'changelog_items'],
-  'Feedbox has exactly these eight tables');
+  array['boards', 'profiles', 'board_owners', 'ideas', 'votes', 'comments', 'changelog_entries', 'changelog_items',
+        'idea_merges', 'idea_merge_votes'],
+  'Feedbox has exactly these ten tables (the merge log since task F6a)');
 
 select ok(c.relrowsecurity, 'row-level security is enabled on ' || c.relname)
 from pg_class c
@@ -40,6 +41,7 @@ select results_eq(
        ('authenticated', 'changelog_items', 'DELETE,SELECT'),
        ('anon', 'comments', 'SELECT'),
        ('authenticated', 'comments', 'SELECT'),
+       ('authenticated', 'idea_merges', 'SELECT'),
        ('anon', 'ideas', 'SELECT'),
        ('authenticated', 'ideas', 'SELECT'),
        ('anon', 'profiles', 'SELECT'),
@@ -84,6 +86,7 @@ select results_eq(
        ('anon', 'publish_changelog_entry', false),   ('authenticated', 'publish_changelog_entry', true),
        ('anon', 'set_idea_status', false),           ('authenticated', 'set_idea_status', true),
        ('anon', 'similar_ideas', true),              ('authenticated', 'similar_ideas', true),
+       ('anon', 'undo_merge', false),                ('authenticated', 'undo_merge', true),
        ('anon', 'unhide_comment', false),            ('authenticated', 'unhide_comment', true),
        ('anon', 'unhide_idea', false),               ('authenticated', 'unhide_idea', true) $$,
   'anon may call only the read helpers; owner functions need a signed-in person (and then check ownership)');
@@ -93,8 +96,8 @@ select results_eq(
   $$ select p.proname::text collate "default" from pg_proc p
      where p.pronamespace = 'private'::regnamespace and has_function_privilege('authenticated', p.oid, 'EXECUTE')
      order by 1 $$,
-  $$ values ('recent_count') $$,
-  'authenticated may call only private.recent_count (needed by the rate-limit trigger); the schema is not exposed by the API');
+  $$ values ('note_merged_vote_removed'), ('recent_count') $$,
+  'authenticated may call only private.recent_count (the rate-limit trigger) and private.note_merged_vote_removed (the unvote trigger, task F6a); the schema is not exposed by the API');
 
 -- Email addresses are never readable.
 select hasnt_column('public', 'profiles', 'email', 'profiles has no email column');

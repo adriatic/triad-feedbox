@@ -34,14 +34,15 @@ interface State {
   at: RegExp;
   /** The header's sign-in state the capture must show (default: the person's, from HEADER). */
   header?: string;
-  /** Undoes what open() set up, right after the capture, so no other screen changes. */
-  after?: () => Promise<void>;
+  /** Undoes what open() set up, right after the capture (the page is still open), so no other screen changes. */
+  after?: (page: Page) => Promise<void>;
 }
 
 const HEADER: Record<As, string> = { visitor: "Viewing as visitor", sam: "Signed in as Sam P.", ana: "Signed in as owner" };
 
 const dark = async () => `/ideas/${await ideaId("Dark mode for the editor")}`;
 const EDITOR_IDEAS = ["Weekly backup to a folder", "Print a whole notebook"];
+const MERGED_IDEA = "Night theme for the editor";
 
 const STATES: State[] = [
   { name: "board-visitor", as: "visitor", at: /^\/$/, open: (p) => go(p, "/") },
@@ -72,6 +73,34 @@ const STATES: State[] = [
       await p.getByRole("button", { name: "Merge into another idea" }).click();
       await p.getByLabel("Merge “Dark mode for the editor” into").selectOption(String(await ideaId("Offline mode")));
       await expect(p.getByTestId("merge-preview")).toBeVisible();
+    },
+  },
+  {
+    // Task F6a: the target's page right after a merge, with the note and Undo
+    // merge. A test idea (ana's, with Sam's vote and comment) is merged into
+    // "Dark mode for the editor" through the app, and the merge is undone
+    // through the app after the capture, so the Lumen data is as before.
+    name: "idea-owner-merged",
+    as: "ana", at: /^\/ideas\/\d+\?merged=\d+$/,
+    open: async (p) => {
+      const board = await boardId();
+      const ana = await userId("ana@lumen.example");
+      const sam = await userId("sam@lumen.example");
+      await admin.from("ideas").insert({ board_id: board, author_id: ana, title: MERGED_IDEA }).throwOnError();
+      const source = await ideaId(MERGED_IDEA);
+      await admin.from("votes").insert({ idea_id: source, user_id: sam }).throwOnError();
+      await admin.from("comments").insert({ idea_id: source, author_id: sam, body: "A darker grey would be easier on the eyes at night." }).throwOnError();
+      await go(p, `/ideas/${source}`);
+      await p.getByRole("button", { name: "Merge into another idea" }).click();
+      await p.getByLabel(`Merge “${MERGED_IDEA}” into`).selectOption(String(await ideaId("Dark mode for the editor")));
+      await p.getByRole("button", { name: "Merge into “Dark mode for the editor”" }).click();
+      await expect(p.getByTestId("merged-note").getByRole("button", { name: "Undo merge" })).toBeVisible();
+      await p.evaluate(() => document.fonts.ready);
+    },
+    after: async (p) => {
+      await p.getByTestId("merged-note").filter({ hasText: MERGED_IDEA }).getByRole("button", { name: "Undo merge" }).click();
+      await expect(p.getByTestId("unmerged-note")).toBeVisible();
+      await admin.from("ideas").delete().eq("title", MERGED_IDEA).throwOnError();
     },
   },
   {
@@ -140,7 +169,9 @@ const STATES: State[] = [
 /** The six designs and the built screen in the same state (light, the design's own width). */
 const DESIGNS: { file: string; state: string; width: Width; height: number; name?: string; task?: string }[] = [
   { file: "Main.dc.html", state: "board-visitor", width: 1280, height: 900 },
-  { file: "Idea.dc.html", state: "idea-owner", width: 1280, height: 980, task: "F6" },
+  { file: "Idea.dc.html", state: "idea-owner", width: 1280, height: 980, task: "F6a" },
+  // Task F6a: the target's page after a merge, with Undo merge; Idea.dc.html has no such note.
+  { file: "Idea.dc.html", state: "idea-owner-merged", width: 1280, height: 980, name: "IdeaMerged", task: "F6a" },
   { file: "PostIdea.dc.html", state: "post-idea-similar", width: 1280, height: 820 },
   { file: "SignIn.dc.html", state: "sign-in", width: 1280, height: 640 },
   { file: "Changelog.dc.html", state: "changelog", width: 1280, height: 800 },
@@ -187,7 +218,7 @@ test("screenshots of every screen and state, and the side-by-side images", async
         const file = path.join(OUT, `${state.name}-${scheme}-${width}.png`);
         const png = await page.screenshot({ path: file, fullPage: true, animations: "disabled", caret: "hide" });
         built.set(`${state.name}-${scheme}-${width}`, png);
-        await state.after?.();
+        await state.after?.(page);
         await context.close();
       }
     }

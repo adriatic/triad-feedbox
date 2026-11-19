@@ -33,6 +33,10 @@ describe("pasted SQL files", () => {
       "supabase/checks/preview-owner-nik.sql",
       "supabase/people/remove-person.sql",
       "supabase/checks/person-removal.sql",
+      "supabase/apply/preview-merge-undo.sql",
+      "supabase/apply/prod-merge-undo.sql",
+      "supabase/checks/preview-merge-undo.sql",
+      "supabase/checks/prod-merge-undo.sql",
     ]));
   });
 
@@ -119,18 +123,65 @@ describe("the O2 migration (board_owner_ids, decision F5-D1)", () => {
   });
 });
 
+describe("the F6a migration (the merge log and undo_merge)", () => {
+  const path = "supabase/migrations/20261118120000_merge_undo.sql";
+  const migration = read(path);
+  const lines = migration.split("\n");
+  const first = lines.findIndex((l) => l !== "" && !l.startsWith("--"));
+  const body = lines.slice(first).join("\n").trimEnd();
+
+  it("is exactly the reviewed file (task F6a), never edited after it has run on feedbox-preview", () => {
+    expect(createHash("sha256").update(migration).digest("hex"))
+      .toBe("60a9681b612a90a1c7db046bee0b75fe598499d490da993d60f7707d51e037f7");
+  });
+
+  it("holds no email column and no email address", () => {
+    expect(body).not.toMatch(/mail/i);
+    expect(body).not.toMatch(/@/);
+  });
+
+  it.each(["preview", "prod"])("supabase/apply/%s-merge-undo.sql runs the migration's statements word for word", (project) => {
+    const pasted = read(`supabase/apply/${project}-merge-undo.sql`);
+    const between = pasted.match(/-- migration:begin\n([\s\S]*?)\n-- migration:end/)?.[1];
+    expect(between).toBe(body);
+  });
+
+  it.each(["preview", "prod"])("supabase/apply/%s-merge-undo.sql uses the fingerprint block of the checks word for word and expects v1 + O2", (project) => {
+    const shared = read("supabase/checks/prod-board.sql").match(/-- shared:fingerprint:begin[\s\S]*?-- shared:fingerprint:end/)?.[0];
+    expect(shared).toBeDefined();
+    const text = read(`supabase/apply/${project}-merge-undo.sql`);
+    expect(text).toContain(shared!);
+    expect(text).toContain("'ea60181fdd11e237aa19ee5d6d6c186d'");
+  });
+
+  it.each([
+    ["supabase/apply/preview-merge-undo.sql", "supabase/apply/prod-merge-undo.sql"],
+    ["supabase/checks/preview-merge-undo.sql", "supabase/checks/prod-merge-undo.sql"],
+  ])("%s and %s differ only in the project they are for", (preview, prod) => {
+    const strip = (text: string) => text
+      .split("\n").slice(1).join("\n")
+      .replaceAll("feedbox-preview", "PROJECT").replaceAll("feedbox-prod", "PROJECT")
+      .replaceAll("preview-merge-undo", "FILE").replaceAll("prod-merge-undo", "FILE")
+      .replace(/^-- Run once[\s\S]*?\n--\n/m, "");
+    expect(strip(read(prod))).toBe(strip(read(preview)));
+  });
+});
+
 describe("task F6: Nik as an owner on feedbox-preview, and removing a person on request", () => {
   const shared = read("supabase/checks/prod-board.sql").match(/-- shared:fingerprint:begin[\s\S]*?-- shared:fingerprint:end/)?.[0];
 
-  it.each(["supabase/preview/owner-nik.sql", "supabase/people/remove-person.sql"])(
-    "%s uses the fingerprint block of the checks word for word, and expects the v1 + O2 fingerprint",
-    (path) => {
-      expect(shared).toBeDefined();
-      const text = read(path);
-      expect(text).toContain(shared!);
-      expect(text).toContain("'ea60181fdd11e237aa19ee5d6d6c186d'");
-    },
-  );
+  // owner-nik.sql ran on feedbox-preview before task F6a, so it expects the v1 + O2
+  // fingerprint. The removal template must work on the database as it is now: v1 + O2 + F6a.
+  it.each([
+    ["supabase/preview/owner-nik.sql", "ea60181fdd11e237aa19ee5d6d6c186d"],
+    ["supabase/people/remove-person.sql", "2814d0ac55dce9fa93db839da532dec7"],
+    ["supabase/checks/person-removal.sql", "2814d0ac55dce9fa93db839da532dec7"],
+  ])("%s uses the fingerprint block of the checks word for word, and expects the fingerprint %s", (path, fingerprint) => {
+    expect(shared).toBeDefined();
+    const text = read(path);
+    expect(text).toContain(shared!);
+    expect(text).toContain(`'${fingerprint}'`);
+  });
 
   // A copy for one request may change only the lines between "request:begin" and "request:end".
   const outsideRequest = (text: string) =>

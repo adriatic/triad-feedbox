@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 /**
  * The owner tools on Idea detail (Idea.dc.html, task F6; F1 sections 3, 5, 6).
  * Every tool is a server action that calls one owner function in the
- * database (set_idea_status, merge_ideas, hide_idea, unhide_idea,
+ * database (set_idea_status, merge_ideas, undo_merge, hide_idea, unhide_idea,
  * hide_comment, unhide_comment) with the person's own session. The database
  * checks that the person owns the board and refuses anything else; the
  * browser never calls Supabase itself.
@@ -46,9 +46,9 @@ export async function changeStatus(_prev: OwnerState, form: FormData): Promise<O
 }
 
 /**
- * Merge this idea into another (F1 section 5). No undo in version 1: the form
- * says so before the button. Afterwards the person lands on the target, whose
- * page says what was merged into it.
+ * Merge this idea into another (F1 section 5). Afterwards the person lands on
+ * the target, whose page says what was merged into it and offers Undo merge
+ * (task F6a).
  */
 export async function mergeInto(_prev: OwnerState, form: FormData): Promise<OwnerState> {
   const sourceId = id(form, "idea_id");
@@ -98,4 +98,23 @@ export async function setCommentHidden(_prev: OwnerState, form: FormData): Promi
   if (error) return { status: "error", message: ownerRefusalMessage(error, hide ? "Hiding the comment" : "Unhiding the comment") };
   refreshIdea(ideaId);
   return { status: "done", message: hide ? "The comment is hidden." : "The comment is visible again.", at: Date.now() };
+}
+
+/**
+ * Undo one merge (task F6a): undo_merge puts the merged idea back on the board
+ * with its votes and comments. Afterwards the person stays on the target's
+ * page, which says what came back, with a link to it.
+ */
+export async function undoMerge(_prev: OwnerState, form: FormData): Promise<OwnerState> {
+  const mergeId = id(form, "merge_id");
+  const targetId = id(form, "idea_id");
+  const sourceId = id(form, "source_id");
+  if (!mergeId || !targetId || !sourceId) return { status: "error", message: "This merge does not exist. Reload the page." };
+  const supabase = await signedIn();
+  if (!supabase) return ENDED;
+  const { error } = await supabase.rpc("undo_merge", { p_merge_id: mergeId });
+  if (error) return { status: "error", message: ownerRefusalMessage(error, "Undoing the merge") };
+  refreshIdea(sourceId);
+  refreshIdea(targetId);
+  redirect(`/ideas/${targetId}?unmerged=${sourceId}`);
 }

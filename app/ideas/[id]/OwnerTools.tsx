@@ -1,7 +1,7 @@
 "use client";
 import { useActionState, useId, useState } from "react";
 import { formatComments, formatNumber, formatVotes, mergePreview, STATUSES, statusLabel, type IdeaStatus } from "@/lib/feedbox";
-import { changeStatus, mergeInto, setCommentHidden, setIdeaHidden, type OwnerState } from "./owner-actions";
+import { changeStatus, mergeInto, setCommentHidden, setIdeaHidden, undoMerge, type OwnerState } from "./owner-actions";
 
 export interface MergeTarget {
   id: number;
@@ -132,7 +132,9 @@ function MergePanel({ idea, targets, onCancel }: { idea: Props["idea"]; targets:
             </li>
             <li>&ldquo;{idea.title}&rdquo; leaves the board, and its address leads to &ldquo;{target.title}&rdquo;.</li>
           </ul>
-          <p className="merge-warning">There is no undo. A wrong merge can only be repaired by hand in the database.</p>
+          <p className="merge-question">
+            Merge &ldquo;{idea.title}&rdquo; into &ldquo;{target.title}&rdquo;? You can undo this from that idea&rsquo;s page.
+          </p>
         </div>
       )}
       <Outcome state={state} />
@@ -164,6 +166,22 @@ export function CommentHideButton({ ideaId, commentId, hidden }: { ideaId: numbe
           {state.message}
         </span>
       )}
+    </form>
+  );
+}
+
+/** Undo merge, in the note on the target's page (owners only, task F6a). */
+export function UndoMergeButton({ mergeId, ideaId, sourceId }: { mergeId: number; ideaId: number; sourceId: number }) {
+  const [state, action, pending] = useActionState(undoMerge, IDLE);
+  return (
+    <form action={action} className="undo-merge">
+      <input type="hidden" name="merge_id" value={mergeId} />
+      <input type="hidden" name="idea_id" value={ideaId} />
+      <input type="hidden" name="source_id" value={sourceId} />
+      <button type="submit" className="btn" disabled={pending}>
+        Undo merge
+      </button>
+      <Outcome state={state} />
     </form>
   );
 }

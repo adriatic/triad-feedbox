@@ -1,4 +1,4 @@
--- supabase/checks/person-removal.sql | 199 lines | last line: -- end of person-removal.sql
+-- supabase/checks/person-removal.sql | 202 lines | last line: -- end of person-removal.sql
 -- =============================================================================
 -- READ-ONLY check (task F6). Changes nothing: one SELECT.
 -- THIS FILE IS THE TEMPLATE: it always FAILs as it is. For one request, a task
@@ -132,7 +132,8 @@ person as (
          (xpath('/table/row/others_on_ideas/text()', x))[1]::text::int as others_on_ideas,
          (xpath('/table/row/votes/text()', x))[1]::text::int as votes,
          (xpath('/table/row/comments/text()', x))[1]::text::int as comments,
-         (xpath('/table/row/owns/text()', x))[1]::text::int as owns
+         (xpath('/table/row/owns/text()', x))[1]::text::int as owns,
+         (xpath('/table/row/merge_votes/text()', x))[1]::text::int as merge_votes
   from request r
   cross join lateral (select query_to_xml(format(
                  'select (select count(*) from auth.users u where u.id = %1$L) as users,
@@ -145,9 +146,11 @@ person as (
                                    where i.author_id = %1$L and v.user_id <> %1$L)) as others_on_ideas,
                          (select count(*) from public.votes v where v.user_id = %1$L) as votes,
                          (select count(*) from public.comments c where c.author_id = %1$L) as comments,
-                         (select count(*) from public.board_owners o where o.user_id = %1$L) as owns', r.person),
+                         (select count(*) from public.board_owners o where o.user_id = %1$L) as owns,
+                         (select count(*) from public.idea_merge_votes mv where mv.user_id = %1$L) as merge_votes', r.person),
                false, false, '') as x
-         where to_regclass('public.boards') is not null and to_regclass('public.board_owners') is not null) q
+         where to_regclass('public.boards') is not null and to_regclass('public.board_owners') is not null
+           and to_regclass('public.idea_merge_votes') is not null) q
 ),
 checks (n, check_name, ok, detail) as (
   select 1, 'project', (select name from project) = (select for_project from request),
@@ -157,22 +160,22 @@ checks (n, check_name, ok, detail) as (
               then format('this project has no project marker (triad.project). This check is for %s.', (select for_project from request))
               else format('this project is marked %s; this check is for %s.', (select name from project), (select for_project from request)) end
   union all
-  select 2, 'migrations', a.md5 = 'ea60181fdd11e237aa19ee5d6d6c186d',
-         case when a.md5 = 'ea60181fdd11e237aa19ee5d6d6c186d'
-              then 'the Feedbox v1 and O2 migrations are present and unchanged (fingerprint ea60181fdd11e237aa19ee5d6d6c186d).'
-              else format('the database does not match the Feedbox v1 and O2 migrations (fingerprint %s, expected ea60181fdd11e237aa19ee5d6d6c186d).', a.md5) end
+  select 2, 'migrations', a.md5 = '2814d0ac55dce9fa93db839da532dec7',
+         case when a.md5 = '2814d0ac55dce9fa93db839da532dec7'
+              then 'the Feedbox v1, O2 and F6a migrations are present and unchanged (fingerprint 2814d0ac55dce9fa93db839da532dec7).'
+              else format('the database does not match the Feedbox v1, O2 and F6a migrations (fingerprint %s, expected 2814d0ac55dce9fa93db839da532dec7).', a.md5) end
   from mig_all a
   union all
   select 3, 'person removed', coalesce((select users = 0 from person), false),
-         case when not exists (select 1 from person) then 'the Feedbox tables are missing, so nothing could be asked.'
+         case when not exists (select 1 from person) then 'the Feedbox tables or the merge log are missing, so nothing could be asked.'
               when (select users from person) = 0 then 'there is no person with this id in this project.'
               else (select format('the person still exists: display name %s; %s ideas (with %s votes and comments by other people on them, which go too); %s votes; %s comments; owner of %s boards. The removal script removes all of this.',
                                   coalesce('"' || name || '"', '(none)'), ideas, others_on_ideas, votes, comments, owns) from person) end
   union all
-  select 4, 'nothing left', coalesce((select profiles + ideas + votes + comments + owns = 0 from person), false),
-         case when not exists (select 1 from person) then 'the Feedbox tables are missing, so nothing could be asked.'
-              else (select format('left with this id: %s profile, %s ideas, %s votes, %s comments, %s owner rows (expected 0 of each).',
-                                  profiles, ideas, votes, comments, owns) from person) end
+  select 4, 'nothing left', coalesce((select profiles + ideas + votes + comments + owns + merge_votes = 0 from person), false),
+         case when not exists (select 1 from person) then 'the Feedbox tables or the merge log are missing, so nothing could be asked.'
+              else (select format('left with this id: %s profile, %s ideas, %s votes, %s comments, %s owner rows, %s votes in the merge log (expected 0 of each).',
+                                  profiles, ideas, votes, comments, owns, merge_votes) from person) end
 ),
 -- shared:result:begin (row 0 is the overall result; every check depends on check 1, the project)
 gated as (
