@@ -157,11 +157,12 @@ test("the header never links to the page you are on; the changelog has Back to t
 
 test("nothing links to the page you are on: the footer, the tabs and the sort menu (task F5d)", async ({ page }) => {
   const footer = page.locator("footer.site-footer");
-  // The board: the footer leads to the changelog.
+  // The board: the footer leads to the changelog and to Contact the owner (task CT1).
   await page.goto("/");
-  await expect(footer).toHaveText("Lumen runs on Feedbox, a free, open-source feedback board. See what shipped");
+  await expect(footer).toHaveText("Lumen runs on Feedbox, a free, open-source feedback board. See what shipped · Contact the owner");
   await expect(footer.locator('a[href="/changelog"]')).toHaveCount(1);
   await expect(footer.getByRole("link", { name: "See what shipped" })).toBeVisible();
+  await expect(footer.getByRole("link", { name: "Contact the owner" })).toHaveAttribute("href", "/contact");
 
   // The current tab is not a link; the other tabs are.
   const tabs = page.getByRole("navigation", { name: "Ideas by status" });
@@ -183,12 +184,18 @@ test("nothing links to the page you are on: the footer, the tabs and the sort me
   await footer.getByRole("link", { name: "See what shipped" }).click();
   await expect(page).toHaveURL(/\/changelog$/);
   await expect(page.getByRole("heading", { level: 1, name: "What shipped in Lumen" })).toBeVisible();
-  await expect(footer).toHaveText("Lumen runs on Feedbox, a free, open-source feedback board.");
+  await expect(footer).toHaveText("Lumen runs on Feedbox, a free, open-source feedback board. Contact the owner");
   await expect(footer.locator('a[href="/changelog"]')).toHaveCount(0);
-  await expect(footer.getByRole("link")).toHaveCount(0);
+  await expect(footer.getByRole("link")).toHaveText(["Contact the owner"]);
+
+  // Contact the owner (task CT1): the footer has no link to /contact there.
+  await footer.getByRole("link", { name: "Contact the owner" }).click();
+  await expect(page).toHaveURL(/\/contact$/);
+  await expect(footer).toHaveText("Lumen runs on Feedbox, a free, open-source feedback board. See what shipped");
+  await expect(footer.getByRole("link")).toHaveText(["See what shipped"]);
 
   // Every page a visitor can open: no link anywhere on it leads to its own address.
-  const pages = ["/", "/?tab=planned", "/?sort=new", "/?q=sync", "/changelog", `/ideas/${await ideaId("Dark mode for the editor")}`, "/sign-in", "/sign-in?next=%2Fchangelog"];
+  const pages = ["/", "/?tab=planned", "/?sort=new", "/?q=sync", "/changelog", `/ideas/${await ideaId("Dark mode for the editor")}`, "/sign-in", "/sign-in?next=%2Fchangelog", "/contact"];
   for (const path of pages) {
     await page.goto(path);
     await expect(page.locator("header.site-header")).toBeVisible();

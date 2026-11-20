@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import { Suspense, type ReactNode } from "react";
 import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
+import { countUnread } from "@/lib/messages/data";
 import { getBoard, getViewer } from "@/lib/supabase/data";
 import "./globals.css";
 
@@ -26,11 +27,13 @@ const inter = Inter({ subsets: ["latin"], weight: ["400", "500", "600", "700"], 
 export default async function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   const board = await getBoard();
   const viewer = await getViewer(board?.id ?? null);
+  // Owners see "Messages (2)" in the header while two messages are unread (task CT1).
+  const unread = board && viewer.role === "owner" ? await countUnread(board.id) : 0;
   return (
     <html lang="en" className={inter.variable}>
       <body>
         <Suspense>
-          <Header board={board} viewer={viewer} />
+          <Header board={board} viewer={viewer} unreadMessages={unread} />
         </Suspense>
         {children}
         <Suspense>

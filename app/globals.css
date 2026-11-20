@@ -1041,3 +1041,106 @@ textarea {
   justify-content: space-between;
   gap: 12px;
 }
+
+/* ---- Contact the owner and Messages (task CT1; no design, laid out like Post an idea) ---- */
+.contact-page {
+  max-width: 720px;
+}
+.contact-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 24px;
+}
+.counter {
+  align-self: flex-end;
+  font-variant-numeric: tabular-nums;
+}
+.counter-over {
+  color: var(--alert-fg);
+}
+.contact-shown {
+  margin: 0;
+  font-size: 14px;
+}
+.notice {
+  margin: 0;
+  background: var(--shipped-bg);
+  color: var(--shipped-fg);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 14px;
+}
+.message-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.message {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.message-unread {
+  border-color: var(--accent);
+}
+.message-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+.message-from {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  min-width: 0;
+}
+.message-email {
+  color: var(--accent);
+  overflow-wrap: anywhere;
+}
+.message-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.chip-new {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.message-body {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.message-tool {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+@media (max-width: 640px) {
+  /* The owner's way to the messages stays in the header on a phone (the Changelog link moves to the footer):
+     on a row of its own under the board, the state and Sign out, which stay as they are for everyone. */
+  .header-link.header-messages {
+    display: block;
+    order: 1;
+    flex-basis: 100%;
+    padding: 0;
+    margin-top: -4px;
+    font-size: 14px;
+  }
+  .contact-form {
+    padding: 16px;
+  }
+  .message {
+    padding: 14px 16px;
+  }
+}

@@ -5,8 +5,8 @@ select no_plan();
 
 select tables_are('public',
   array['boards', 'profiles', 'board_owners', 'ideas', 'votes', 'comments', 'changelog_entries', 'changelog_items',
-        'idea_merges', 'idea_merge_votes'],
-  'Feedbox has exactly these ten tables (the merge log since task F6a)');
+        'idea_merges', 'idea_merge_votes', 'messages'],
+  'Feedbox has exactly these eleven tables (the merge log since task F6a, messages since task CT1)');
 
 select ok(c.relrowsecurity, 'row-level security is enabled on ' || c.relname)
 from pg_class c
@@ -44,6 +44,7 @@ select results_eq(
        ('authenticated', 'idea_merges', 'SELECT'),
        ('anon', 'ideas', 'SELECT'),
        ('authenticated', 'ideas', 'SELECT'),
+       ('authenticated', 'messages', 'SELECT'),
        ('anon', 'profiles', 'SELECT'),
        ('authenticated', 'profiles', 'SELECT'),
        ('authenticated', 'votes', 'SELECT') $$,
@@ -61,13 +62,14 @@ select results_eq(
        ('authenticated', 'changelog_items', 'UPDATE', 'note,position'),
        ('authenticated', 'comments', 'INSERT', 'body,idea_id'),
        ('authenticated', 'ideas', 'INSERT', 'board_id,body,title'),
+       ('authenticated', 'messages', 'INSERT', 'board_id,body'),
        ('authenticated', 'profiles', 'UPDATE', 'display_name'),
        ('authenticated', 'votes', 'INSERT', 'idea_id') $$,
   'writes are granted column by column, and only these columns');
 
 select ok(not has_sequence_privilege(r, s, p), r || ' has no ' || p || ' on ' || s)
 from unnest(array['anon', 'authenticated']) r,
-     unnest(array['public.ideas_id_seq', 'public.comments_id_seq']) s,
+     unnest(array['public.ideas_id_seq', 'public.comments_id_seq', 'public.messages_id_seq']) s,
      unnest(array['USAGE', 'SELECT', 'UPDATE']) p;
 
 -- Functions: what each role may call.
@@ -77,6 +79,7 @@ select results_eq(
      where p.pronamespace = 'public'::regnamespace
      order by 2, 1 $$,
   $$ values
+       ('anon', 'board_messages', false),            ('authenticated', 'board_messages', true),
        ('anon', 'board_owner_ids', true),            ('authenticated', 'board_owner_ids', true),
        ('anon', 'has_display_name', true),           ('authenticated', 'has_display_name', true),
        ('anon', 'hide_comment', false),              ('authenticated', 'hide_comment', true),
@@ -86,6 +89,7 @@ select results_eq(
        ('anon', 'publish_changelog_entry', false),   ('authenticated', 'publish_changelog_entry', true),
        ('anon', 'remove_my_vote', false),            ('authenticated', 'remove_my_vote', true),
        ('anon', 'set_idea_status', false),           ('authenticated', 'set_idea_status', true),
+       ('anon', 'set_message_read', false),          ('authenticated', 'set_message_read', true),
        ('anon', 'similar_ideas', true),              ('authenticated', 'similar_ideas', true),
        ('anon', 'undo_merge', false),                ('authenticated', 'undo_merge', true),
        ('anon', 'unhide_comment', false),            ('authenticated', 'unhide_comment', true),
@@ -105,7 +109,7 @@ select hasnt_column('public', 'profiles', 'email', 'profiles has no email column
 select is_empty(
   $$ select table_name, column_name from information_schema.columns
      where table_schema = 'public' and column_name ilike '%mail%' $$,
-  'no Feedbox table has an email column');
+  'no Feedbox table has an email column (an owner reads a sender''s email only through board_messages, task CT1)');
 
 select tests.person('sam', 'Sam');
 

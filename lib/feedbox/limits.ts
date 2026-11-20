@@ -8,6 +8,8 @@ export const RATE_LIMITS = {
   idea: 5,
   comment: 30,
   vote: 100,
+  /** Messages to a board's owners (task CT1; the messages part, lib/messages). */
+  message: 5,
 } as const;
 
 export type RateLimitedAction = keyof typeof RATE_LIMITS;

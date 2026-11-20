@@ -1,4 +1,4 @@
--- supabase/people/remove-person.sql | 177 lines | last line: -- end of remove-person.sql
+-- supabase/people/remove-person.sql | 178 lines | last line: -- end of remove-person.sql
 -- =============================================================================
 -- Removes ONE person and everything they wrote, on request (task F6; README,
 -- "Privacy"). CHANGES the database. THIS FILE IS THE TEMPLATE and refuses to
@@ -19,14 +19,15 @@
 -- "on delete cascade" rules their profile, their ideas (with every vote,
 -- comment and changelog line on those ideas, also other people's), their
 -- votes and their comments, and their votes in the merge log
--- (idea_merge_votes, task F6a: an undo then does not give them back). Where
+-- (idea_merge_votes, task F6a: an undo then does not give them back), and
+-- their messages to the owners (task CT1). Where
 -- they hid something as an owner, wrote a changelog entry, or merged or
 -- undid a merge, only the link to them is cleared.
 --
 -- * ONE statement (a do-block): all or nothing. No psql commands.
 -- * It refuses, and changes nothing, unless: the block "request" names
 --   feedbox-preview or feedbox-prod and the project marker says the same; the
---   database is the Feedbox v1, O2 and F6a migrations, unchanged; the person
+--   database is the Feedbox v1, O2, F6a and CT1 migrations, unchanged; the person
 --   exists; the person owns no board (an owner is removed as an owner first,
 --   with its own reviewed script); and no other idea has been merged into one
 --   of their ideas. If the script was pasted twice into one query, the second
@@ -58,7 +59,7 @@ begin
     raise exception 'Refused: this project is marked %. This script is only for %. Check the project name at the top of the page. Nothing was changed.', coalesce(v_project, '(no name)'), v_for;
   end if;
 
-  -- 3. Refuse unless the reviewed migrations (Feedbox v1, O2 and F6a) are present unchanged.
+  -- 3. Refuse unless the reviewed migrations (Feedbox v1, O2, F6a and CT1) are present unchanged.
   if to_regclass('public.boards') is null or to_regclass('public.board_owners') is null then
     raise exception 'Refused: the Feedbox migration is not applied in this project (no table public.boards or public.board_owners). Nothing was changed.';
   end if;
@@ -148,8 +149,8 @@ mig_all as (
 -- shared:fingerprint:end
   fp as (select a.md5 from mig_all a)
   select fp.md5 into v_md5 from fp;
-  if v_md5 is distinct from '081ca51dd5b60c7b98cf8a6309584fb0' then
-    raise exception 'Refused: the database does not match the reviewed Feedbox v1, O2 and F6a migrations (fingerprint %, expected 081ca51dd5b60c7b98cf8a6309584fb0). Nothing was changed.', v_md5;
+  if v_md5 is distinct from 'f48a2386ba60d5b8353cc684891bdc25' then
+    raise exception 'Refused: the database does not match the reviewed Feedbox v1, O2, F6a and CT1 migrations (fingerprint %, expected f48a2386ba60d5b8353cc684891bdc25). Nothing was changed.', v_md5;
   end if;
 
   -- 4. The person must exist (a double paste ends here: the first copy removed them).

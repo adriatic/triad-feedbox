@@ -2,10 +2,11 @@
 
 How the parts of Feedbox connect, written from the code at commit `1a13023` (tag `f5`, task A1).
 
-Every statement names the file it comes from, so it can be checked line by line. Line numbers refer to `1a13023`, except in the parts updated by task O2 (the Owner mark for everyone) and task F6 (the owner tools and the changelog editor), which name files and functions instead. Three short names are used throughout:
+Every statement names the file it comes from, so it can be checked line by line. Line numbers refer to `1a13023`, except in the parts updated by task O2 (the Owner mark for everyone), task F6 (the owner tools and the changelog editor) and task CT1 (contact the owner), which name files and functions instead, or the lines of their own migration. Four short names are used throughout:
 
 - **the migration** means `supabase/migrations/20261113000000_feedbox_v1.sql`, the Feedbox v1 migration;
 - **the O2 migration** means `supabase/migrations/20261118000000_board_owner_ids.sql` (task O2, decision F5-D1);
+- **the CT1 migration** means `supabase/migrations/20261119120000_messages.sql` (task CT1, messages to the owner);
 - **data.ts** means `lib/supabase/data.ts`.
 
 If this file and the code disagree, the code is right and this file has a fault. CLAUDE.md requires every task that changes how the parts connect to update this file in the same pull request.
@@ -19,6 +20,7 @@ If this file and the code disagree, the code is right and this file has a fault.
 5. [Rules that hold everywhere](#5-rules-that-hold-everywhere)
 6. [Where settings live](#6-where-settings-live)
 7. [Not built yet, and open decisions](#7-not-built-yet-and-open-decisions)
+8. [The messages part (to carry over to another app)](#8-the-messages-part-to-carry-over-to-another-app)
 
 ## 1. The parts
 
@@ -26,14 +28,14 @@ If this file and the code disagree, the code is right and this file has a fault.
 
 - **What it gets:** the HTML that the app's server renders, and the app's JavaScript bundle.
 - **No Supabase client:** the browser talks only to the app; it never calls Supabase itself.
-  - No component imports a Supabase client. The files that use Supabase are all server code: `app/**/page.tsx`, `app/**/actions.ts`, `app/auth/sign-out/route.ts`, `proxy.ts` and data.ts. `app/ideas/new/PostIdeaForm.tsx:14` and `components/Header.tsx:5` import only TypeScript types from data.ts, and types are removed at build time.
+  - No component imports a Supabase client. The files that use Supabase are all server code: `app/**/page.tsx`, `app/**/actions.ts`, `app/auth/sign-out/route.ts`, `proxy.ts`, data.ts and, since task CT1, `lib/messages/data.ts`. `app/ideas/new/PostIdeaForm.tsx:14` and `components/Header.tsx:5` import only TypeScript types from data.ts, and types are removed at build time.
   - The browser client `lib/supabase/browser.ts` was deleted in task F5b.
   - A build of this code (A1, 2026-11-18) has no Supabase address, no key and no Supabase client in `.next/static/`, the files sent to the browser.
 - **Browser code that does work** (the `"use client"` files):
   - The vote button: `components/VoteButton.tsx`, `components/useVote.ts`.
   - The search box: `components/SearchBox.tsx`.
   - The sort menu: `components/SortMenu.tsx`.
-  - The forms: `app/ideas/new/PostIdeaForm.tsx`, `app/ideas/[id]/CommentForm.tsx`, `app/sign-in/SignInForm.tsx`, `app/auth/confirm/ConfirmForm.tsx`, `app/welcome/WelcomeForm.tsx`.
+  - The forms: `app/ideas/new/PostIdeaForm.tsx`, `app/ideas/[id]/CommentForm.tsx`, `app/sign-in/SignInForm.tsx`, `app/auth/confirm/ConfirmForm.tsx`, `app/welcome/WelcomeForm.tsx`, and since task CT1 `app/contact/ContactForm.tsx` and `app/messages/MarkButton.tsx`.
   - The header and footer, which know the current page: `components/Header.tsx`, `components/Footer.tsx`.
   - Dates: `components/LocalDate.tsx`.
 - **What it keeps:** only the session cookies that the server sets (see 3.7).
@@ -44,13 +46,13 @@ Next.js 16, App Router (`package.json`). It has five kinds of server code:
 
 | Kind | Files | What it does |
 |---|---|---|
-| Pages (server components) | `app/page.tsx` (the board), `app/ideas/[id]/page.tsx`, `app/ideas/new/page.tsx`, `app/changelog/page.tsx`, `app/changelog/new/page.tsx`, `app/sign-in/page.tsx`, `app/auth/confirm/page.tsx`, `app/welcome/page.tsx`, `app/not-found.tsx`, `app/layout.tsx` | Read from Supabase on the server and render HTML |
-| Server actions (`"use server"`) | `app/ideas/new/actions.ts` (`postIdea`, `findSimilar`), `app/ideas/[id]/actions.ts` (`addComment`), `app/ideas/[id]/owner-actions.ts` (`changeStatus`, `mergeInto`, `setIdeaHidden`, `setCommentHidden`; task F6; `undoMerge`, task F6a), `app/changelog/new/actions.ts` (`publishEntry`; task F6), `components/vote-action.ts` (`vote`), `app/sign-in/actions.ts` (`sendLink`), `app/auth/confirm/actions.ts` (`finishSignIn`), `app/welcome/actions.ts` (`saveDisplayName`) | Called by the browser's forms and buttons; they run on the server and call Supabase |
+| Pages (server components) | `app/page.tsx` (the board), `app/ideas/[id]/page.tsx`, `app/ideas/new/page.tsx`, `app/changelog/page.tsx`, `app/changelog/new/page.tsx`, `app/contact/page.tsx` and `app/messages/page.tsx` (task CT1), `app/sign-in/page.tsx`, `app/auth/confirm/page.tsx`, `app/welcome/page.tsx`, `app/not-found.tsx`, `app/layout.tsx` | Read from Supabase on the server and render HTML |
+| Server actions (`"use server"`) | `app/ideas/new/actions.ts` (`postIdea`, `findSimilar`), `app/ideas/[id]/actions.ts` (`addComment`), `app/ideas/[id]/owner-actions.ts` (`changeStatus`, `mergeInto`, `setIdeaHidden`, `setCommentHidden`; task F6; `undoMerge`, task F6a), `app/changelog/new/actions.ts` (`publishEntry`; task F6), `app/contact/actions.ts` (`sendToOwner`; task CT1), `app/messages/actions.ts` (`markMessage`; task CT1), `components/vote-action.ts` (`vote`), `app/sign-in/actions.ts` (`sendLink`), `app/auth/confirm/actions.ts` (`finishSignIn`), `app/welcome/actions.ts` (`saveDisplayName`) | Called by the browser's forms and buttons; they run on the server and call Supabase |
 | Route handler | `app/auth/sign-out/route.ts` | `POST` signs out; `GET` answers 405 |
 | Proxy (Next.js 16's name for middleware) | `proxy.ts` | Runs before every page request: refreshes the session cookies and sends a person without a display name to /welcome |
-| Server-side Supabase access | `lib/supabase/server.ts` (the client), data.ts (all reads, and the vote write), `lib/supabase/env.ts` (settings), `lib/supabase/site.ts` (the site's own address) | The only way the app reaches Supabase |
+| Server-side Supabase access | `lib/supabase/server.ts` (the client), data.ts (all reads, and the vote write), `lib/messages/data.ts` (the messages part, task CT1), `lib/supabase/env.ts` (settings), `lib/supabase/site.ts` (the site's own address) | The only way the app reaches Supabase |
 
-**The core library:** `lib/feedbox/` is pure TypeScript with no Supabase or Next.js imports (CLAUDE.md, Layout). It holds the rules the screens share: permissions, validation, sorting, tab counts, the vote button's states, date formats and the changelog grouping. Its unit tests sit beside the code (`lib/feedbox/*.test.ts`).
+**The core library:** `lib/feedbox/` is pure TypeScript with no Supabase or Next.js imports (CLAUDE.md, Layout). It holds the rules the screens share: permissions, validation, sorting, tab counts, the vote button's states, date formats and the changelog grouping. Its unit tests sit beside the code (`lib/feedbox/*.test.ts`). The messages part keeps its own rules and words the same way, in `lib/messages/core.ts` (section 8).
 
 **One board per deployment:** a deployment shows one board, named by the setting `FEEDBOX_BOARD_SLUG` (`lib/supabase/env.ts:22-25`). It is read with `getBoard()` (data.ts:15-24).
 
@@ -58,12 +60,13 @@ Next.js 16, App Router (`package.json`). It has five kinds of server code:
 
 Each hosted project has two parts the app uses: Postgres and Supabase Auth.
 
-**Postgres.** Everything is created by the migration, except the function `board_owner_ids`, which the O2 migration adds, and the merge log with `undo_merge`, which the F6a migration (`supabase/migrations/20261118120000_merge_undo.sql`) adds. Line numbers below without a file name are those of the v1 migration.
+**Postgres.** Everything is created by the migration, except the function `board_owner_ids`, which the O2 migration adds, the merge log with `undo_merge`, which the F6a migration (`supabase/migrations/20261118120000_merge_undo.sql`) adds, and the messages, which the CT1 migration adds. Line numbers below without a file name are those of the v1 migration.
 
 - **Eight tables** (migration lines 36-148): `boards`, `profiles`, `board_owners`, `ideas`, `votes`, `comments`, `changelog_entries`, `changelog_items`.
 - **The merge log, two tables more** (F6a migration lines 44-71):
   - `idea_merges`: one row per merge (board, source, target, the owner, the time, the comments it moved, the ideas merged earlier into the source that it pointed at the target, and when and by whom it was undone). Owners of the board read it (policy `idea_merges_read_owner`, line 429); nobody writes it except through `merge_ideas` and `undo_merge`.
   - `idea_merge_votes`: one row per vote the merge took from the source (who, when they voted, whether the merge added a vote for them on the target, whether they removed their vote on the target since). Nobody reads or writes it through the API, not even an owner, because who voted for what is private (a person reads only their own votes); RLS is on with no policy and no grant. Its rows go with the person (`on delete cascade` on `profiles`).
+- **Messages, one table more** (CT1 migration lines 40-58, task CT1): `messages`, one row per message a signed-in person sends to the owners of one board (board, sender, text, time, and when an owner marked it read). The text is 1 to 2000 characters with nothing to trim at either end (check `messages_body_check`). A signed-in person with a display name inserts only `board_id` and `body`, as themselves, to a board that exists (policy `messages_insert_own`, lines 213-219); the board's owners read its messages (policy `messages_read_owner`, lines 221-223); nobody else reads any, not even the sender. There is no update or delete rule. Its rows go with the person (`on delete cascade` on `profiles`), so removing a person removes their messages. No table holds an email address: an owner sees a sender's sign-in email only through `board_messages` (below).
 - **Row-level security (RLS):** it is on for every table (lines 804-811), with policies at lines 813-928. The grants first revoke everything from `anon` and `authenticated` and then grant back only what is needed, column by column for writes (lines 726-797).
 - **Functions the app may call:**
   - `is_board_owner` (lines 172-185);
@@ -72,12 +75,14 @@ Each hosted project has two parts the app uses: Postgres and Supabase Auth.
   - `board_owner_ids` (O2 migration lines 21-38): the user ids of one board's owners, and nothing else, for everyone. It is security definer with `search_path` set to `''`, stable, and only `anon` and `authenticated` may execute it (`supabase/tests/11_board_owner_ids.sql`);
   - the owner functions `set_idea_status`, `merge_ideas`, `hide_idea`, `unhide_idea`, `hide_comment`, `unhide_comment` and `publish_changelog_entry` (lines 463-677). Since F6a, `merge_ideas` is the version in the F6a migration (lines 187-274: the same name, arguments, result and rules, and it also writes the merge log);
   - `undo_merge` (F6a migration lines 293-404), for owners only: see 3.10;
-  - `remove_my_vote` (F6a migration lines 139-180, task F6b): the only way to take a vote back (3.5).
+  - `remove_my_vote` (F6a migration lines 139-180, task F6b): the only way to take a vote back (3.5);
+  - `board_messages(board)` (CT1 migration lines 136-167), for owners of that board only (42501 for anyone else, visitors cannot call it at all): the board's messages, newest first, each with the sender's display name and the email address they sign in with, read from `auth.users`. It is the only function that reads `auth.users` for the app (`tests/sql-files.test.ts`);
+  - `set_message_read(message, read)` (CT1 migration lines 169-193), for owners of the message's board only: marks it read or unread.
 
-  The app calls `is_board_owner` (data.ts:44), `similar_ideas` (data.ts:173, 199), since O2 `board_owner_ids` (`getOwnerIds` in data.ts), since F6 every owner function, each from one server action (3.10), and since F6a `undo_merge` and a read of `idea_merges` (`getMergeNotes` in data.ts).
+  The app calls `is_board_owner` (data.ts:44), `similar_ideas` (data.ts:173, 199), since O2 `board_owner_ids` (`getOwnerIds` in data.ts), since F6 every owner function, each from one server action (3.10), since F6a `undo_merge` and a read of `idea_merges` (`getMergeNotes` in data.ts), and since CT1 an insert into `messages`, a count of the unread ones, `board_messages` and `set_message_read` (all in `lib/messages/data.ts`, 3.11).
 - **Triggers** (lines 235-453):
   - a profile for every new user (5a);
-  - rate limits of 5 ideas, 30 comments and 100 votes per person per hour (5b);
+  - rate limits of 5 ideas, 30 comments and 100 votes per person per hour (5b), and since CT1 5 messages (trigger `messages_rate_limit`; the CT1 migration replaces `private.recent_count` and `private.enforce_rate_limit`, lines 61-130, with versions that know the kind "message"; the other kinds do exactly as before);
   - the idea timestamps, and "an idea in the changelog stays Shipped" (5c);
   - posting an idea casts the author's vote (5d);
   - `vote_count` follows `votes` (5e);
@@ -91,7 +96,7 @@ Each hosted project has two parts the app uses: Postgres and Supabase Auth.
 
 - **Sign-in:** by email link only. The app asks for a link with `signInWithOtp` (`app/sign-in/actions.ts:26-29`) and redeems it with `verifyOtp` (`app/auth/confirm/actions.ts:23`).
 - **Email templates:** the two templates are files in this repository (`supabase/templates/confirmation.html`, `supabase/templates/magic_link.html`). Nik pastes them into each hosted project (CLAUDE.md, "Sign-in emails").
-- **Users and profiles:** users live in `auth.users`. A trigger gives each new user a row in `public.profiles` with no display name (migration lines 236-250). A profile never holds an email address (comment at line 45; `supabase/tests/01_structure.sql`, "no emails").
+- **Users and profiles:** users live in `auth.users`. A trigger gives each new user a row in `public.profiles` with no display name (migration lines 236-250). A profile never holds an email address (comment at line 45; `supabase/tests/01_structure.sql`, "no emails"). Since task CT1 one function shows an email address to someone: `board_messages` shows the owners of a board the sign-in email of each person who sent that board a message, and nothing else (3.11).
 
 ### 1.4 Resend
 
@@ -369,6 +374,18 @@ flowchart LR
 6. **The changelog editor:** see 3.9.
 7. **Guarded by:** `scripts/test-races.sh` (task F6b, the table above), `e2e/owner.spec.ts` (status, merge with its counts, undo of a merge with every idea, vote and comment as before, hide and unhide of an idea and a comment, publishing; a member and a visitor never see the panel, Undo merge, the hidden items or the editor) and, in the database, `supabase/tests/06_owner_functions.sql`, `07_merge.sql`, `08_changelog.sql` and `12_merge_undo.sql` (task F6a: the log, the undo, the in-between cases, two merges into one target, refusals, who may read and write the log).
 
+### 3.11 Contact the owner and Messages (task CT1)
+
+Decided by Nik on 2026-11-19 at 11:42 AM: a message is stored in the database and the owner reads it on a Messages page that only owners see. No email is sent, and there is no new key, secret or account. Built as the messages part (section 8).
+
+1. **The way in:** every page's footer has **Contact the owner** next to **See what shipped**, except /contact itself (`components/Footer.tsx`).
+2. **A visitor** on `/contact` reads one sentence, "Only signed-in people can send a message to the owner of <board>.", and **Sign in to contact the owner**, which leads to `/sign-in?next=%2Fcontact` (`app/contact/page.tsx`; decision (a) of task CT1).
+3. **A signed-in person** sees the box **Your message** with a counter ("12 / 2000"), the sentence "The owner will see your name and the email address you sign in with, so they can answer you." and **Send message** (`app/contact/ContactForm.tsx`; decision (b)). The button calls the server action `sendToOwner` (`app/contact/actions.ts`), which calls `sendMessage` (`lib/messages/data.ts`): the text is checked and trimmed (`checkMessage`, `lib/messages/core.ts`), the session is checked, and `{ board_id, body }` is inserted with the person's own session.
+4. **The database decides:** the column grant, the policy `messages_insert_own` (the sender's own message, a display name, a board that exists), the length check, and the rate limit of 5 messages an hour (1.3). A refusal is shown in words: "You are posting quickly. Try again in a few minutes." for the limit, "Write your message first." for an empty box, otherwise "Sending your message did not work. Reload the page and try again." The text stays in the box. After sending, the page says "Your message was sent to the owner." and the box is empty.
+5. **An owner** sees **Messages** in the header, with the number of unread messages when there are any ("Messages (2)"), except on /messages itself (`components/Header.tsx`; the count comes from `countUnread` in `lib/messages/data.ts`, called in `app/layout.tsx` for owners only; RLS would give anyone else 0). On a phone the link has a row of its own under the header's first row.
+6. **`/messages`** (`app/messages/page.tsx`) is for the board's owners only; anyone else, visitors included, is sent to the board. It lists `board_messages` newest first: the date (`LocalDate`, in the viewer's time zone), the sender's name and email (a `mailto:` link, so the owner answers from their own email), the text, the mark **New** while unread, and **Mark as read** or **Mark as unread** (`app/messages/MarkButton.tsx` → `markMessage` → `set_message_read`). With no messages it says "No messages yet."
+7. **Guarded by:** `supabase/tests/13_messages.sql` (who may send, who may read, the email for owners only, read and unread, the length rules, the rate limit, removal of a person), `supabase/tests/01_structure.sql`, `scripts/test-sql-checks.sh` (sections G3 and N: the pasted scripts on both projects), `e2e/messages.spec.ts` (the visitor's view, sending with the counter and the errors in words and the limit, the owner reading with the name and email, read and unread, the header count, the phone header) and `e2e/screens.spec.ts` (the footer link, and no link to the page you are on).
+
 ## 4. Keys: which key is used where
 
 | Key | Where it is used | Where it lives |
@@ -391,20 +408,20 @@ Each rule names the test or check that guards it.
 
 | # | Never… | Guarded by |
 |---|---|---|
-| 1 | The browser never calls Supabase itself; every read and write goes through the app's server | `e2e/fixtures.ts` (since task F6; before, only `e2e/screens.spec.ts`): every test in `auth.spec.ts`, `owner.spec.ts` and `screens.spec.ts` aborts and records any browser request to the local Supabase API, and fails if there was one (task F5b). `lib/supabase/env.test.ts` checks that only `env.ts` reads the Supabase settings |
+| 1 | The browser never calls Supabase itself; every read and write goes through the app's server | `e2e/fixtures.ts` (since task F6; before, only `e2e/screens.spec.ts`): every test in `auth.spec.ts`, `owner.spec.ts`, `screens.spec.ts` and, since task CT1, `messages.spec.ts` aborts and records any browser request to the local Supabase API, and fails if there was one (task F5b). `lib/supabase/env.test.ts` checks that only `env.ts` reads the Supabase settings |
 | 2 | No secret key in the app, on the Mac or in a commit | CLAUDE.md, "Three rules" 1 and 3; `.gitignore` excludes every `.env*`; `e2e/local-supabase.ts:26-28` refuses any Supabase address but 127.0.0.1 |
 | 3 | A table never goes without row-level security, and anon and authenticated never get more than the listed grants | `supabase/tests/01_structure.sql`: RLS on every table, exact table and column privileges, and `search_path=''` on every security definer function |
 | 4 | Never more than one vote per person per idea | The primary key on `votes` (migration lines 98-103); `supabase/tests/04_votes.sql` (a second vote fails with 23505; nobody votes as someone else); `e2e/screens.spec.ts:288` (a double click, a reload and a second insert through the API give one vote) |
 | 5 | Nobody writes `vote_count`, `comment_count`, `status`, `hidden_at` or `published_at` directly | Column grants (migration lines 767-780) and triggers 5c-5f; `supabase/tests/03_ideas.sql` ("what nobody may write directly"); `supabase/tests/01_structure.sql` |
 | 6 | Nobody votes, posts or comments without a display name | Policies with `has_display_name()` (migration lines 839-841, 849-858, 875-884); `proxy.ts:39-50`; `e2e/auth.spec.ts:40` (step 4: nothing else can be done before the name is set) |
-| 7 | A person never exceeds 5 ideas, 30 comments or 100 votes an hour | Trigger 5b (migration lines 257-300); `supabase/tests/09_rate_limits.sql`; `e2e/screens.spec.ts:327` (the refusal in words) |
+| 7 | A person never exceeds 5 ideas, 30 comments, 100 votes or (since task CT1) 5 messages an hour | Trigger 5b (migration lines 257-300; for messages, CT1 migration lines 61-130); `supabase/tests/09_rate_limits.sql`, `13_messages.sql`; `e2e/screens.spec.ts:327` and `e2e/messages.spec.ts` (the refusal in words) |
 | 8 | `/auth/confirm` never signs in on page load | `app/auth/confirm/actions.ts:9-13`; `e2e/auth.spec.ts:47-52` and `145-151` (after opening the link the header still reads "Viewing as visitor") |
 | 9 | A sign-in link never goes through supabase.co (`{{ .ConfirmationURL }}`) | `tests/email-templates.test.ts`; CLAUDE.md, "Sign-in emails" |
 | 10 | `next` never leads off the site, or back into /sign-in or /auth/ | `safeNextPath` (`lib/feedbox/next-path.ts:9-27`); `lib/feedbox/next-path.test.ts` |
 | 11 | Sign-out never happens on a GET | `app/auth/sign-out/route.ts:11-13`; `e2e/auth.spec.ts:218-219` (405) |
 | 12 | A moment is never shown in the server's time zone; a calendar date is never shifted | `components/LocalDate.tsx`; `lib/feedbox/format.ts`; `lib/feedbox/format.test.ts`; `e2e/screens.spec.ts:390` (a post at 5:04 PM Pacific on Nov 17 reads Nov 17 in Los Angeles and Nov 18 in UTC and Berlin) |
-| 13 | No link leads to the page you are on: header, footer, the current tab, the ticked sort order | `e2e/screens.spec.ts:145` (header, task F5c) and `:172` (footer, tabs, sort menu, and every visitor page checked for links to its own address, task F5d) |
-| 14 | A profile never holds an email address, and a display name never contains "@" | `profiles` has no email column; check `profiles_display_name_check` (migration lines 53-59); `supabase/tests/01_structure.sql`; `e2e/auth.spec.ts:68` |
+| 13 | No link leads to the page you are on: header, footer, the current tab, the ticked sort order | `e2e/screens.spec.ts:145` (header, task F5c) and `:172` (footer, tabs, sort menu, and every visitor page checked for links to its own address, task F5d; `/contact` since task CT1); `e2e/messages.spec.ts` (`/contact` signed in, and `/messages` for an owner, task CT1) |
+| 14 | A profile never holds an email address, and a display name never contains "@"; no table has an email column | `profiles` has no email column; check `profiles_display_name_check` (migration lines 53-59); `supabase/tests/01_structure.sql`; `e2e/auth.spec.ts:68` |
 | 15 | A migration is never edited after it ran on feedbox-preview | `tests/sql-files.test.ts:68-74` pins the file's sha256 |
 | 16 | The tests never touch a hosted project | `e2e/local-supabase.ts:26-28`; `ci.yml` (no secrets; local Supabase only); CLAUDE.md, "Three rules" 2 |
 | 17 | Only an owner of the board changes a status, merges or undoes a merge, hides or unhides, or publishes the changelog, and only through the owner functions | The functions check `is_board_owner` (migration section 6; `undo_merge` in the F6a migration); no grant lets anyone write `status`, `merged_into_id`, `hidden_at` or `published_at` (rule 5), or either merge log table; the app calls them only from server actions; `supabase/tests/06_owner_functions.sql`, `07_merge.sql`, `08_changelog.sql`, `12_merge_undo.sql`; `e2e/owner.spec.ts` |
@@ -412,6 +429,7 @@ Each rule names the test or check that guards it.
 | 19 | A person becomes an owner, or is removed, only by a reviewed script, never from the app | No insert policy on `board_owners`; `supabase/production/owner-nik.sql`, `supabase/preview/owner-nik.sql`, `supabase/people/remove-person.sql`, each with its check and tested in `scripts/test-sql-checks.sh`; a removal copy may change only its block "request" (`tests/sql-files.test.ts`) |
 | 20 | A wrong merge never needs SQL to repair: an owner undoes it from the app, and nobody, not even an owner, reads who voted from the merge log | `undo_merge` (F6a migration); RLS on `idea_merges` (owners read) and `idea_merge_votes` (nobody); `supabase/tests/12_merge_undo.sql`; `supabase/checks/<project>-merge-undo.sql` rows 4-6; `e2e/owner.spec.ts` (task F6a) |
 | 21 | A vote, unvote or comment is never lost or counted twice because a merge or an undo of its idea runs at the same moment: it waits, then either goes through where it was made or is refused in words that say where to go; two owners never deadlock | Trigger `refuse_merged_idea` and `remove_my_vote` lock the idea first; `merge_ideas` and `undo_merge` lock every idea they change in one statement in id order (F6a migration, task F6b); `scripts/test-races.sh` (two sessions at the same time, cases a1-d7; CI job `db`); `supabase/tests/04_votes.sql`, `05_comments.sql`; `supabase/checks/<project>-merge-undo.sql` row 7 |
+| 22 | A message is read only by the owners of its board, and a person's email address is shown only to the owners of a board that person sent a message to, only with those messages; nothing is sent by email (task CT1) | RLS on `messages` (CT1 migration lines 211-223); `board_messages` checks `is_board_owner` and is the only function that reads `auth.users` for the app (`tests/sql-files.test.ts`); `supabase/tests/13_messages.sql`; `supabase/checks/<project>-messages.sql` rows 3-6; `e2e/messages.spec.ts` |
 
 ## 6. Where settings live
 
@@ -421,7 +439,7 @@ Each rule names the test or check that guards it.
   - `NEXT_PUBLIC_SITE_URL` is optional, read in `lib/supabase/site.ts:10`.
   - In Vercel they are set per environment (CLAUDE.md, "App settings on Vercel"). Locally and in CI they come from `npx supabase status` (`playwright.config.ts:30-34`).
 - **Local Supabase settings:** `supabase/config.toml`. Where they differ from hosted, the difference is on purpose (CLAUDE.md, "Local Supabase against these settings").
-- **SQL that Nik runs on a hosted project:** files in `supabase/checks/`, `supabase/marker/`, `supabase/production/`, since task O2 `supabase/apply/` (a migration as Nik pastes it, guarded by the project marker), and since task F6 `supabase/preview/` (scripts for feedbox-preview only), since task F6a `supabase/apply/<project>-merge-undo.sql`, and `supabase/people/` (removing a person on request: a template, copied per request), each reviewed and tested (CLAUDE.md, "SQL is code").
+- **SQL that Nik runs on a hosted project:** files in `supabase/checks/`, `supabase/marker/`, `supabase/production/`, since task O2 `supabase/apply/` (a migration as Nik pastes it, guarded by the project marker), and since task F6 `supabase/preview/` (scripts for feedbox-preview only), since task F6a `supabase/apply/<project>-merge-undo.sql`, since task CT1 `supabase/apply/<project>-messages.sql`, and `supabase/people/` (removing a person on request: a template, copied per request), each reviewed and tested (CLAUDE.md, "SQL is code").
 
 ## 7. Not built yet, and open decisions
 
@@ -431,13 +449,44 @@ Each rule names the test or check that guards it.
 
 **Built in task F6b:** merges and undos while other people vote, unvote and comment, and two owners at the same moment (3.5, 3.6, 3.10 "At the same moment", rule 21). Asked by Nik, TRIAD chat, 2026-11-18 6:19 PM. Decision **F1-D8** ("no undo in v1") is replaced: Nik, TRIAD chat, 2026-11-18 5:54-6:06 PM, after running F6 on the Preview: an owner can undo any merge from the app, and a wrong merge never needs SQL.
 
+**Built in task CT1:** Contact the owner and Messages (1.3, 3.11, rule 22, section 8). Decided by Nik on 2026-11-19 at 11:42 AM; choices (a) only signed-in people send, and (b) the owner sees the sender's name and sign-in email, made by Claude.ai.
+
 **Not built in version 1 (F1, section 11):** CAPTCHA, many boards per deployment, and editing or unpublishing a changelog entry in the app (the database allows both for owners; no screen offers them). The check of the hosted Preview is task P1.
 
-**Decisions** (from the F5, A1, F6 and F6a reports):
+**Decisions** (from the F5, A1, F6 and F6a reports, as recorded in the merge task M11):
 - **F5-D1 (decided 2026-11-18, done in task O2):** everyone may read who the board's owners are, so the Owner mark shows for every viewer (see 3.6 and 3.10).
-- **F5-D2 (open):** whether to build an end-to-end runner against the hosted Preview (`playwright.config.ts:4-7`).
+- **F5-D2 (decided):** an end-to-end check of the hosted Preview is task P1, after F6 (`playwright.config.ts:4-7`).
 - **A1-D2 (decided 2026-11-18, fixed later):** the search limit of 20 applies to the whole board before the tab is chosen (see 3.2); it is fixed later, with F6's database work or when a board grows, not now. F6 needed no database change; see the F6 report, decision F6-D2.
 - **F6-D1 (recorded in task F6a; Nik did not answer, Claude.ai took the recommendation, Nik may change it):** owners do not find hidden ideas by the board's search; they find them in the tab lists, and never in similar ideas (`similar_ideas` leaves them out, migration line 713).
 - **F6-D2 (recorded in task F6a, the same way):** the search limit of 20 (A1-D2) is not fixed now.
 - **F6-D3 (recorded in task F6a, the same way):** the merge panel keeps the vote count as a range.
-- **F6-D4 (open):** whether a removal copy may name the person's User UID in this public repository.
+- **F6-D4 (decided before the merge of F6, M11: keep as built):** a removal copy names the person's User UID in this public repository, never an email address.
+
+## 8. The messages part (to carry over to another app)
+
+Task CT1 built "Contact the owner" as a small part with plain, general names, because the same feature is planned for another app (pact-web). This section says what the part is, what it needs from the app around it, and how to carry it over. Nothing in it is specific to Feedbox's ideas, votes or comments.
+
+**What it does:** a signed-in person sends a plain-text message to the owners of one board. The message is stored in the database; no email is sent. The board's owners read the messages on a page only they see, with each sender's name and sign-in email, answer from their own email, and mark each message read or unread.
+
+**Its files:**
+
+| Layer | File | What it holds |
+|---|---|---|
+| Database | `supabase/migrations/20261119120000_messages.sql` | The table `messages`; RLS (`messages_insert_own`, `messages_read_owner`); the owner functions `board_messages(board)` and `set_message_read(message, read)`; the rate limit kind "message" (trigger `messages_rate_limit`) |
+| Rules and words | `lib/messages/core.ts` (tests: `lib/messages/core.test.ts`) | `MESSAGE_MAX` (2000), `MESSAGES_PER_HOUR` (5), `checkMessage` and `cleanMessage` (trim, 1 to 2000 characters as a person counts them), `messageCounter`, `inboxLabel` ("Messages (2)"), `inboxSummary`, `replyHref` (a `mailto:` link), and every sentence on the screens (`MESSAGE_WORDS`). Pure TypeScript, no Supabase or Next.js import |
+| Server | `lib/messages/data.ts` | `sendMessage`, `countUnread`, `getInbox`, `setMessageRead`, each through the Supabase server client with the person's own session |
+| Screens | `app/contact/page.tsx`, `app/contact/ContactForm.tsx`, `app/contact/actions.ts`; `app/messages/page.tsx`, `app/messages/MarkButton.tsx`, `app/messages/actions.ts` | The two pages and their server actions |
+| Wiring | `components/Footer.tsx` (the link), `components/Header.tsx` and `app/layout.tsx` (the count for owners), `app/globals.css` (section "Contact the owner and Messages") | The only places the rest of the app knows about the part |
+| Tests | `supabase/tests/13_messages.sql`, `e2e/messages.spec.ts`, the checks `supabase/checks/<project>-messages.sql` and their cases in `scripts/test-sql-checks.sh` | |
+
+**What it needs from the app around it:**
+
+1. A table `public.boards` with a `uuid` primary key `id` (a message belongs to one board; in an app without boards, one row for the whole site is enough).
+2. A table `public.profiles` keyed by the `auth.users` id, with a `display_name` (the sender's name on the Messages page; `on delete cascade` removes a person's messages with them).
+3. The functions `public.is_board_owner(board uuid)` (who may read and mark) and `public.has_display_name()` (who may send).
+4. A rate limit trigger function that takes the kind as its argument, here `private.enforce_rate_limit('message')` with `private.recent_count(kind, user)`. An app without one can drop the trigger, or carry over the two functions with only the kind "message".
+5. Supabase Auth, so that `auth.users` holds the sender's email and `auth.uid()` names the sender.
+6. On the server: a Supabase server client that sends the person's session (`createClient` in `lib/supabase/server.ts`), the current board's id, and whether the viewer is an owner (`getViewer` in data.ts). On the screens: a date component in the viewer's time zone (`components/LocalDate.tsx`) and the shared styles (`.card`, `.btn`, `.textarea`, `.alert`, `.chip`).
+
+**To carry it over:** copy the migration (renaming the board and profile tables if the other app names them differently), `lib/messages/`, the two page folders and the CSS section; add the footer link, the header link and the count; then run its tests there. Its rules hold in the database itself (RLS, the length check, the rate limit, the owner checks), so screens built differently stay safe.
+

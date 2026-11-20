@@ -164,6 +164,31 @@ const STATES: State[] = [
     },
   },
   { name: "changelog", as: "visitor", at: /^\/changelog$/, open: (p) => go(p, "/changelog") },
+  // Task CT1: Contact the owner and Messages (no design; laid out like Post an idea).
+  { name: "contact-visitor", as: "visitor", at: /^\/contact$/, open: (p) => go(p, "/contact") },
+  {
+    name: "contact-signed-in",
+    as: "sam", at: /^\/contact$/,
+    open: async (p) => {
+      await go(p, "/contact");
+      await p.getByLabel("Your message").fill("Hello! Could you remove my account and everything I posted? Thank you.");
+    },
+  },
+  {
+    // Sam sends the message; it is removed again right after the capture.
+    name: "contact-sent",
+    as: "sam", at: /^\/contact$/,
+    open: async (p) => {
+      await go(p, "/contact");
+      await p.getByLabel("Your message").fill("Screenshot message, removed right after the capture.");
+      await p.getByRole("button", { name: "Send message" }).click();
+      await expect(p.locator("form.contact-form").getByRole("status")).toHaveText("Your message was sent to the owner.");
+    },
+    after: async () => {
+      await admin.from("messages").delete().eq("body", "Screenshot message, removed right after the capture.").throwOnError();
+    },
+  },
+  { name: "messages-owner", as: "ana", at: /^\/messages$/, open: (p) => go(p, "/messages") },
 ];
 
 /** The six designs and the built screen in the same state (light, the design's own width). */
